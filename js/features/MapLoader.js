@@ -99,7 +99,6 @@ if (gamei) {
         writable: false,
         configurable: false
     });
-
     console.log(`game id set to ${gameid}`);;
 }
 async function initialize() {
@@ -336,6 +335,8 @@ async function initialize() {
 
 window.onload = () => {
     initialize()
+
+    connect()
 
     let watermark = document.createElement('a')
     watermark.innerHTML = 'Vortex2+2 v0.1.0 by @inuk'

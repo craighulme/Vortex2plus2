@@ -24,9 +24,11 @@ function start() {
     const gamei = url.searchParams.get("VPlusGameId");
     document.documentElement.appendChild(meta)
     loadScript(chrome.runtime.getURL("overrides/vortex2+2-engine.js"), () => {
-        if (!gamei) {
-            loadScript(chrome.runtime.getURL("js/demoparts.js"));
-        }
+        loadScript(chrome.runtime.getURL("overrides/vortex2+2-multiplayer.js"), () => {
+            if (!gamei) {
+                loadScript(chrome.runtime.getURL("js/demoparts.js"));
+            }
+        });
     });
 }
 

@@ -302,7 +302,7 @@ let locked = false;
 let coyoteTimer = 0;
 let jumpBuffer = 0;
 const COYOTE_TIME = 0.12;
-const JUMP_BUFFER = 0.15;
+const JUMP_BUFFER = 0.05;
 
 let climbState = 'none';
 let climbLedgeY = 0;
