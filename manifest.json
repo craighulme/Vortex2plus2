@@ -1,0 +1,71 @@
+{
+  "name": "Vortex2+2",
+  "version": "0.1.0",
+  "manifest_version": 3,
+  "description": "An extension to make Vortex so much better.",
+  "icons": {
+    "16": "img/icon/16.png",
+    "32": "img/icon/32.png",
+    "48": "img/icon/48.png",
+    "128": "img/icon/128.png"
+  },
+  "host_permissions": [
+    "https://pastebin.com/*",
+    "https://vortex.towerstats.com/"
+  ],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "declarativeNetRequest"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://vortex.towerstats.com/*"
+      ],
+      "css": [
+        "styles/main.css"
+      ],
+      "js": [
+        "js/inject/InjectMapLoader.js",
+        "js/inject/InjectOverrides.js",
+        "js/lightMode.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://vortex.towerstats.com/search*"
+      ],
+      "js": [
+        "js/features/Search.js"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "js/*",
+        "settings/*",
+        "overrides/*",
+        "img/textures/*"
+      ],
+      "matches": [
+        "https://vortex.towerstats.com/*"
+      ]
+    }
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "rules",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,173 @@
+:root {
+    /* default theme*/
+    --bgcol1: #121212;
+    --bgcol2: #252525;
+    --bgcol3: #2a2a2a;
+    --bgcoltopbar: #161616;
+
+    --linecol1: #3f3f3f28;
+    --linecol2: #ffffff28;
+
+    --textcol1: #ffffff;
+    --textcol2: #ffffffbe;
+
+    --vortex-main: #ffffff;
+    --vortex-secondary: #ffffffa2;
+
+    --accentcol1: #098b4a;
+}
+
+html[theme='light'] {
+    --bgcol1: #ffffff;
+    --bgcol2: #ececec;
+    --bgcol3: #dbdbdb;
+    --bgcoltopbar: #ffffff;
+
+    --linecol1: #61616128;
+    --linecol2: #00000028;
+
+    --textcol1: #000000;
+    --textcol2: #000000be;
+
+    --vortex-main: #000000;
+    --vortex-secondary: #000000a2;
+}
+
+/* main */
+body {
+    background: var(--bgcol1) !important;
+    color: var(--textcol1) !important;
+}
+
+button,
+input {
+    background: var(--bgcol3) !important;
+    color: var(--textcol1) !important;
+    border-color: var(--linecol1) !important;
+}
+
+/* friends bar */
+.friend-name {
+    color: var(--textcol1) !important;
+}
+.badge {
+    color: var(--textcol1) !important;
+    background-color: var(--bgcol2) !important;
+}
+
+.section-title,
+.section-link {
+    color: var(--textcol2) !important;
+}
+
+/* topbar stuff */
+.navbar,
+.tab-btn,
+.tab-bar {
+    color: var(--textcol1) !important;
+    background-color: var(--bgcoltopbar) !important;
+    border-bottom: 1px solid var(--linecol1) !important;
+}
+
+.section-sep {
+    border-top: 1px solid var(--linecol1) !important;
+}
+
+.btn-signout-sm {
+    border: 1px solid var(--linecol2) !important;
+    color: var(--textcol1) !important;
+}
+
+.navbar-logo,
+.logo {
+    color: var(--vortex-main) !important;
+}
+
+.navbar-logo-secondary {
+    color: var(--vortex-secondary) !important;
+}
+
+#search-input {
+    color: var(--textcol2) !important;
+}
+
+.navbar-search input:focus {
+    background: var(--bgcol2) !important;
+    border-color: var(--linecol2) !important;
+}
+
+/* game buttons */
+.game-card {
+    border-color: var(--linecol2) !important;
+}
+
+.game-card-title {
+    color: var(--textcol1) !important;
+}
+
+.game-card-meta {
+    color: var(--textcol2) !important;
+}
+
+/* game page */
+.game-description-text,
+.game-detail-creator {
+    color: var(--textcol2) !important;
+}
+
+.game-stat-value,
+.game-stat-label,
+.game-description-label {
+    color: var(--textcol1) !important;
+}
+
+.game-description-box {
+    border-color: var(--linecol2) !important;
+}
+
+/* profile page */
+strong,
+span,
+.join-date-label {
+    color: var(--textcol1) !important;
+}
+
+.profile-stat,
+.bio-text,
+.join-date-value {
+    color: var(--textcol2) !important;
+}
+
+.profile-info-panel,
+.bio-box {
+    border-color: var(--linecol2) !important;
+}
+
+/* accents */
+.btn-play {
+    color: var(--textcol1) !important;
+    background-color: var(--accentcol1) !important;
+}
+
+.btn-primary {
+    color: var(--textcol1) !important;
+    background-color: var(--accentcol1) !important;
+}
+
+/* login page */
+label {
+    color: var(--textcol2) !important;
+}
+
+.link-row {
+    color: var(--textcol2) !important;
+}
+
+/* social page */
+.user-row-name {
+    color: var(--textcol1) !important;
+}
+.user-row {
+    border-color: var(--linecol2) !important;
+    background-color: var(--bgcol2);
+}

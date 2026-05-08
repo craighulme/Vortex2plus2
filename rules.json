@@ -1,0 +1,24 @@
+[
+  {
+    "id": 1,
+    "priority": 2,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "parts.js",
+      "resourceTypes": ["script"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 2,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "vortex-engine.js",
+      "resourceTypes": ["script"]
+    }
+  }
+]
