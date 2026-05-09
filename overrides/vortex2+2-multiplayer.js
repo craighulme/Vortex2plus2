@@ -62,7 +62,7 @@ function _makeNameLabel(username) {
     return spr;
 }
 
-function makeRemote(username) {
+function makeRemote(username, id) {
     const clone = _clonePlayerFBX();
     if (!clone) return null;
 
@@ -76,7 +76,7 @@ function makeRemote(username) {
     clone.traverse(n => { if (_isBone(n)) bones[n.name] = n; });
     const rest = _vortex.getAnimRest();
 
-    return { grp: clone, bones, rest };
+    return { grp: clone, bones, rest, id: id };
 }
 
 function disposeRemote(m) {
@@ -104,6 +104,7 @@ function _setPosY(bones, rest, name, offset, sp, dt) {
     bone.position.y = THREE.MathUtils.lerp(bone.position.y, ry + offset, Math.min(1, sp * dt));
 }
 
+let swords = new Map()
 function _animateRemote(r, dt) {
     const { bones, rest } = r.meshes;
     const sp = 12;
@@ -158,6 +159,62 @@ function _animateRemote(r, dt) {
         _setPosY(bones, rest, 'Left_Arm', 0, sp, dt);
         _setPosY(bones, rest, 'Right_Arm', 0, sp, dt);
     }
+
+    if (window.SWORD_FIGHT) {
+        _setB(bones, rest, 'Right_Arm', 'x', -Math.PI * 0.5, 1, 1);
+        bones.Right_Arm.position.y = 1.5
+        bones.Right_Arm.position.z = -0.5
+        let sword = swords.get(r.id);
+        if (!sword) {
+            fbxLoader.load(importedAssets.swordMdl, (fbx) => {
+                fbx.scale.multiplyScalar(0.005);
+                sword = fbx;
+                sword.castShadow = true;
+                sword.receiveShadow = true;
+                sword.rotation.order = 'YXZ';
+                scene.add(sword);
+                swords.set(r.id, sword)
+            });
+            return
+        }
+        if (sword === true) {
+            return
+        }
+        let grp = r.meshes.grp;
+        let fwdx = Math.sin(grp.rotation.y);
+        let fwdz = Math.cos(grp.rotation.y);
+        let rx = -Math.cos(grp.rotation.y);
+        let rz = Math.sin(grp.rotation.y);
+
+        if (!customPlayerData[r.id]) {
+            return;
+        }
+
+        let slicing = customPlayerData[r.id].slicing
+
+        let fwd = slicing ? 3.2 : 1.5;
+        let right = 1.5;
+        let up = slicing ? 1.5 : 2.8;
+
+        let x = r.meshes.grp.position.x + rx * right + fwdx * fwd;
+        let y = r.meshes.grp.position.y + up;
+        let z = r.meshes.grp.position.z + rz * right + fwdz * fwd;
+
+        sword.position.set(x, y, z);
+        sword.rotation.y = grp.rotation.y;
+        sword.rotation.x = slicing ? Math.PI * 0.5 : 0
+
+        if (slicing) {
+            let charpos = character.position;
+            let dx = (x-rx*0.5) - charpos.x;
+            let dy = y - charpos.y;
+            let dz = (z-rz*0.5) - charpos.z;
+            let distsq = (dx * dx + dy * dy + dz * dz);
+            if (distsq < 7) {
+                playerSpecialValues.health -= dt * 0.5;
+            }
+        }
+    }
 }
 
 const BUBBLE_WORLD_W = 3.2;
@@ -166,6 +223,7 @@ const BUBBLE_SCALE = BUBBLE_WORLD_W / BUBBLE_CANVAS_W;
 const BUBBLE_DURATION = 15000;
 const MAX_BUBBLES = 3;
 const _bubbles = new Map();
+const _healthbars = new Map();
 
 const B_PAD = 18;
 const B_R = 12;
@@ -282,9 +340,64 @@ function _showBubble(id, text) {
     }, BUBBLE_DURATION);
 }
 
-function _updateBubblePositions() {
-    const bubbleBase = _vortex.getCharHeight() - _vortex.getCharFootOffset() + 0.4;
+function _redrawHealthbar(id, health) {
+    let hbar = _healthbars.get(id);
+    if (!hbar) { hbar = { sprite: null }; _healthbars.set(id, hbar); }
 
+    const canvas = document.createElement('canvas');
+    canvas.width = 500;
+    canvas.height = 70;
+
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#00ff00';
+    ctx.fillRect(5, 5, Math.max(5, Math.min(canvas.width - 10, canvas.width * health)), canvas.height - 10);
+
+    if (!hbar.sprite) {
+        hbar.sprite = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
+        _vortex.scene.add(hbar.sprite);
+    }
+
+    hbar.sprite.material.map?.dispose();
+    hbar.sprite.material.map = new THREE.CanvasTexture(canvas);
+    hbar.sprite.material.needsUpdate = true;
+
+    hbar.sprite.scale.set(2.5, 0.35, 1);
+    hbar.sprite.visible = true;
+}
+
+let playerSpecialValues = {
+    health: 1,
+    slicing: false,
+}
+let customPlayerData = {};
+
+function _healthbarDrawingLoop(id) {
+    if (id == myId) {
+        customPlayerData[id] = playerSpecialValues
+    }
+    if (!customPlayerData[id]) {
+        console.log('no custom player data found id: ' + id)
+        setTimeout(() => { _healthbarDrawingLoop(id) }, 500);
+    } else {
+        _redrawHealthbar(id, customPlayerData[id].health);
+        setTimeout(() => { _healthbarDrawingLoop(id) }, 100);
+    }
+
+}
+function _showHealthBar(id) {
+    if (!window.SWORD_FIGHT) {
+        return;
+    }
+    _healthbarDrawingLoop(id);
+}
+
+function _updateBubblePositions() {
+    let bubbleOffset = window.SWORD_FIGHT?0.8:0.4; //originally 0.4
+    let bubbleBase = _vortex.getCharHeight() - _vortex.getCharFootOffset() + bubbleOffset;
     for (const [id, b] of _bubbles) {
         if (!b.sprite || !b.msgs.length) { if (b.sprite) b.sprite.visible = false; continue; }
 
@@ -301,6 +414,22 @@ function _updateBubblePositions() {
         }
 
         b.sprite.position.set(wx, wy + b.sprite.scale.y / 2, wz);
+    }
+    for (const [id, hbar] of _healthbars) {
+        if (!hbar.sprite) { continue; }
+        let wx, wy, wz;
+        if (id === myId) {
+            const char = _vortex.getCharacter();
+            if (!char) { hbar.sprite.visible = false; continue; }
+            wx = char.position.x; wy = _vortex.getCharBubbleBase(); wz = char.position.z;
+        } else {
+            const r = remotes.get(id);
+            if (!r || !r.meshes || !r.meshes.grp.visible) { hbar.sprite.visible = false; continue; }
+            const g = r.meshes.grp;
+            wx = g.position.x; wy = g.position.y + bubbleBase; wz = g.position.z;
+        }
+
+        hbar.sprite.position.set(wx, wy + hbar.sprite.scale.y / 2 - 0.3, wz);
     }
 }
 
@@ -342,12 +471,13 @@ const _MAX_RECONNECTS = 3;
 
 async function connect() {
     const res = await fetch(`/api/ws-ticket?game_id=${window.GAME_ID || 0}&fingerprint=${encodeURIComponent(window._fingerprint || '')}`).then(r => r.ok ? r.json() : null);
-    if (!res) { setTimeout(connect, 4000); return; }
+    if (!res) { console.log('failed to connect'); setTimeout(connect, 4000); return; }
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${proto}://${location.host}/ws/game?ticket=${res.ticket}`);
 
     ws.onopen = () => {
+        console.log('websocket opened');
         clearTimeout(ws._retry);
         _reconnectAttempts = 0;
         startBroadcast();
@@ -356,6 +486,7 @@ async function connect() {
     ws.onmessage = e => handle(JSON.parse(e.data));
 
     ws.onclose = () => {
+        console.log('websocket closed');
         stopBroadcast();
         if (!ws._kicked) {
             if (_reconnectAttempts >= _MAX_RECONNECTS) return;
@@ -364,7 +495,68 @@ async function connect() {
         }
     };
 
-    ws.onerror = () => ws.close();
+    ws.onerror = () => { ws.close(); console.log('websocket error') }
+}
+
+let specialReplicatedNumber = 0
+function encodeNetworkData(data) { //10 bits total
+    let healthBits = Math.round(Math.min(Math.max(0, playerSpecialValues.health * 15), 15)); //4 bits (0-3)
+    let slicingBits = playerSpecialValues.slicing ? 16 : 0; //1 bit (4-4)
+    //5-8 are currently unused
+
+    let syncNormalData = 512; //1 bit (9-9) for now, always use the regular old vortex data.
+
+    specialReplicatedNumber = healthBits + slicingBits + syncNormalData
+
+    let ryBase = Math.round(data.ry * 100) / 100;
+
+    let ry = ryBase + (specialReplicatedNumber / 1024) * 0.01;
+    let anim = data.anim;
+    return {
+        type: data.type,
+        x: data.x,
+        y: data.y,
+        z: data.z,
+        ry,
+        anim,
+    };
+}
+const url = new URL(document.URL);
+const gamei = url.searchParams.get("VPlusGameId");
+function decodeNetworkData(playerData, r) {
+    let fractional = (playerData.ry * 100) % 1;
+    let specialState = Math.round(fractional * 1024);
+
+    let healthBits = (specialState >>> 0) & ((1 << 4) - 1);
+    let slicingBits = (specialState >>> 4) & ((1 << 1) - 1);
+    if (customPlayerData[playerData.id]) {
+        customPlayerData[playerData.id].health = healthBits / 15;
+        customPlayerData[playerData.id].slicing = (slicingBits > 0);
+    } else {
+        customPlayerData[playerData.id] = {
+            health: healthBits / 15,
+            slicing: (slicingBits > 0),
+        }
+    }
+
+
+    let syncNormalData = (specialState & 512) !== 0;
+    if (!gamei) {
+        syncNormalData = true;
+    }
+    if (syncNormalData) {
+        r.tPos.set(playerData.x, playerData.y, playerData.z);
+        r.tRy = Math.round(playerData.ry * 100) / 100;
+        r.anim = playerData.anim;
+        r.seen = performance.now();
+        if (r.meshes && !r.meshes.grp.visible) {
+            r.meshes.grp.position.copy(r.tPos);
+            r.meshes.grp.rotation.y = playerData.ry;
+            r.meshes.grp.visible = true;
+        }
+    } else {
+        //I'm planning on using the xyz fields to replicate even more data in the future, like skin colors or cosmetics!
+    }
 }
 
 function handle(d) {
@@ -381,7 +573,11 @@ function handle(d) {
             myId = d.id;
             Leaderboard.setMyId(myId);
             Leaderboard.addPlayer({ id: myId, username: d.username, is_staff: d.is_staff, is_booster: d.is_booster });
-            for (const p of d.players) addRemote(p.id, p.username, p.is_staff, p.is_booster);
+            for (const p of d.players) {
+                addRemote(p.id, p.username, p.is_staff, p.is_booster);
+                _showHealthBar(p.id)
+            }
+            _showHealthBar(myId);
             fetchFriendData();
             break;
         }
@@ -410,15 +606,7 @@ function handle(d) {
             for (const p of d.players) {
                 const r = remotes.get(p.id);
                 if (!r) continue;
-                r.tPos.set(p.x, p.y, p.z);
-                r.tRy = p.ry;
-                r.anim = p.anim;
-                r.seen = performance.now();
-                if (r.meshes && !r.meshes.grp.visible) {
-                    r.meshes.grp.position.copy(r.tPos);
-                    r.meshes.grp.rotation.y = p.ry;
-                    r.meshes.grp.visible = true;
-                }
+                decodeNetworkData(p, r)
             }
             break;
         }
@@ -484,7 +672,7 @@ function addRemote(id, username, is_staff, is_booster) {
     if (remotes.has(id)) return;
 
     let meshes = null;
-    if (_vortex.getCharacter()) { try { meshes = makeRemote(username); } catch (e) { console.error('[mp] makeRemote failed:', e); } }
+    if (_vortex.getCharacter()) { try { meshes = makeRemote(username, id); } catch (e) { console.error('[mp] makeRemote failed:', e); } }
     if (!meshes) _pendingAvatars.set(id, { username, is_staff, is_booster });
 
     remotes.set(id, {
@@ -494,6 +682,7 @@ function addRemote(id, username, is_staff, is_booster) {
         anim: 'idle',
         animTime: 0,
         seen: performance.now(),
+        id: id,
     });
     Leaderboard.addPlayer({ id, username, is_staff, is_booster });
     Leaderboard.setFriendStatus(id, _statusFor(id));
@@ -507,6 +696,16 @@ function removeRemote(id) {
         for (const m of bub.msgs) clearTimeout(m.timer);
         if (bub.sprite) { _vortex.scene.remove(bub.sprite); bub.sprite.material.map?.dispose(); bub.sprite.material.dispose(); }
         _bubbles.delete(id);
+    }
+    const hbar = _healthbars.get(id);
+    if (hbar) {
+        _vortex.scene.remove(hbar.sprite);
+        _healthbars.delete(id)
+    }
+    const sword = swords.get(id);
+    if (sword) {
+        _vortex.scene.remove(sword)
+        swords.delete(id)
     }
     disposeRemote(r.meshes);
     _pendingAvatars.delete(id);
@@ -531,14 +730,16 @@ function startBroadcast() {
         let ry = char.rotation.y % (2 * Math.PI);
         if (ry > Math.PI) ry -= 2 * Math.PI;
         else if (ry < -Math.PI) ry += 2 * Math.PI;
-        ws.send(JSON.stringify({
+        let dataToEncode = {
             type: 'state',
             x: char.position.x,
             y: char.position.y,
             z: char.position.z,
-            ry,
-            anim,
-        }));
+            ry: ry,
+            anim: anim,
+        }
+        let encoded = encodeNetworkData(dataToEncode);
+        ws.send(JSON.stringify(encoded));
     }, 50);
 }
 
@@ -555,7 +756,7 @@ window._mpUpdate = function (dt) {
         for (const [id, info] of _pendingAvatars) {
             const r = remotes.get(id);
             if (r && !r.meshes) {
-                try { r.meshes = makeRemote(info.username); } catch (e) { console.error('[mp] makeRemote failed:', e); }
+                try { r.meshes = makeRemote(info.username, id); } catch (e) { console.error('[mp] makeRemote failed:', e); }
                 if (r.meshes) r.meshes.grp.visible = false;
             }
         }
@@ -591,4 +792,4 @@ window._mpUpdate = function (dt) {
 window._mpSendChat = function (msg) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'chat', msg }));
-};
+}

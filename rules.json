@@ -7,18 +7,25 @@
     },
     "condition": {
       "urlFilter": "parts.js",
-      "resourceTypes": ["script"]
+      "resourceTypes": [
+        "script"
+      ]
     }
   },
-   {
+  {
     "id": 2,
     "priority": 2,
     "action": {
-      "type": "block"
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/vortex2+2-engine.js"
+      }
     },
     "condition": {
       "urlFilter": "vortex-engine.js",
-      "resourceTypes": ["script"]
+      "resourceTypes": [
+        "script"
+      ]
     }
   },
   {
@@ -29,7 +36,9 @@
     },
     "condition": {
       "urlFilter": "multiplayer.js",
-      "resourceTypes": ["script"]
+      "resourceTypes": [
+        "script"
+      ]
     }
   }
 ]

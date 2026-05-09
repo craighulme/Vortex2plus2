@@ -1,6 +1,6 @@
 {
   "name": "Vortex2+2",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "manifest_version": 3,
   "description": "An extension to make Vortex so much better.",
   "icons": {
@@ -52,7 +52,9 @@
         "js/*",
         "settings/*",
         "overrides/*",
-        "img/textures/*"
+        "img/textures/*",
+        "mdl/*",
+        "sounds/*"
       ],
       "matches": [
         "https://vortex.towerstats.com/*"

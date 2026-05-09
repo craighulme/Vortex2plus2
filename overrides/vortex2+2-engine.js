@@ -1,6 +1,6 @@
 //Made by inuk, for https://github.com/inuk84/Vortex-2-plus-2
-
 console.log('VORTEX ENGINE OVERRIDDEN!')
+
 const STUDS_PER_TILE = 4;
 
 const scene = new THREE.Scene();
@@ -27,8 +27,8 @@ scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xffffff, 0.85);
 sun.position.set(1600, 3200, 1600);
 sun.castShadow = true;
-sun.shadow.mapSize.width = 5000;
-sun.shadow.mapSize.height = 5000;
+sun.shadow.mapSize.width = 15000;
+sun.shadow.mapSize.height = 15000;
 sun.shadow.camera.near = 1;
 sun.shadow.camera.far = 19600;
 sun.shadow.camera.left = -256;
@@ -38,19 +38,17 @@ sun.shadow.camera.bottom = -256;
 sun.shadow.autoUpdate = true;
 scene.add(sun);
 
-
-
 const tlLoader = new THREE.TextureLoader();
 const texCache = new Map();
-let textures = JSON.parse(window._textures.content);
+let importedAssets = JSON.parse(window._importedAssets.content);
 function studTex(rx, ry) {
-    const t = tlLoader.load(textures.stud);
+    const t = tlLoader.load(importedAssets.stud);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(rx, ry);
     return t;
 }
 function studNormalTex(rx, ry) {
-    const t = tlLoader.load(textures.studNormal);
+    const t = tlLoader.load(importedAssets.studNormal);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(rx, ry);
     return t;
@@ -206,7 +204,7 @@ const WALK_SPEED = 16;
 const JUMP_POWER = 50;
 const GRAVITY = -196.2;
 const ROT_SPEED = 14;
-const STEP_HEIGHT = 1.5;
+const STEP_HEIGHT = 1.4;
 const STEP_CLIMB_SPEED = 32;
 
 let CHAR_FOOT_OFFSET = 2.08;
@@ -324,6 +322,34 @@ let extraVelX = 0, extraVelZ = 0;
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 const cursorEl = document.getElementById('cursor');
+
+let leaveButton = document.createElement('span')
+leaveButton.innerHTML = 'Leave'
+overlay.appendChild(leaveButton);
+let yousure = false;
+leaveButton.onclick = function () {
+    if (yousure) {
+        window.location.href = "https://vortex.towerstats.com/";
+    } else {
+        yousure = true;
+        leaveButton.innerText = 'You sure?'
+        setTimeout(() => {
+            leaveButton.innerText = 'Leave'
+            yousure = false;
+        }, 2000);
+    }
+
+}
+Object.assign(overlay.style, {
+    height: '100%',
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '100px'
+});
+
 let cursorX = window.innerWidth / 2;
 let cursorY = window.innerHeight / 2;
 
@@ -367,7 +393,7 @@ fbxLoader.load('assets/models/player.fbx', (fbx) => {
     fbx.traverse(child => {
         if (child.isMesh) child.castShadow = true;
     });
-    fbx.children[0].receiveShadow=true;
+    fbx.children[0].receiveShadow = true;
 
     scene.add(fbx);
     character = fbx;
@@ -415,10 +441,10 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 document.addEventListener('pointerlockchange', () => {
     locked = !!document.pointerLockElement;
     if (locked) {
-        overlay.classList.add('hidden');
+        overlay.style.opacity = 0;
         cursorEl.style.transform = `translate(${cursorX}px, ${cursorY}px)`;
     } else {
-        overlay.classList.remove('hidden');
+        overlay.style.opacity = 1;
         Object.keys(keys).forEach(k => keys[k] = false);
         rmb = false;
     }
@@ -433,10 +459,20 @@ function _cursorOver(el) {
     return cursorX >= r.left && cursorX <= r.right && cursorY >= r.top && cursorY <= r.bottom;
 }
 
+const sfothThemeSong = new Audio(importedAssets.sfothSong);
+sfothThemeSong.loop = true;
+sfothThemeSong.preload = "auto";
+sfothThemeSong.volume = 0.9;
+sfothThemeSong.addEventListener('ended', function () {
+    this.currentTime = 0;
+    this.play();
+}, false);
+
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 renderer.domElement.addEventListener('click', () => {
     if (locked) {
         const cursorOver = _cursorOver;
+        let guiHandled = false;
 
         const chatEl = document.getElementById('chat-window');
         const topbarEl = document.getElementById('hud-topbar');
@@ -454,6 +490,7 @@ renderer.domElement.addEventListener('click', () => {
         }
 
         if (cursorOver(topbarEl)) {
+            guiHandled = true;
             for (const child of topbarEl.children) {
                 if (cursorOver(child)) { child.click(); break; }
             }
@@ -461,6 +498,7 @@ renderer.domElement.addEventListener('click', () => {
         }
 
         if (lbFriendEl && lbFriendEl.style.display !== 'none' && cursorOver(lbFriendEl)) {
+            guiHandled = true;
             for (const child of lbFriendEl.querySelectorAll('button, a')) {
                 if (cursorOver(child)) { child.click(); return; }
             }
@@ -470,6 +508,7 @@ renderer.domElement.addEventListener('click', () => {
         if (lbBodyEl) {
             for (const row of lbBodyEl.querySelectorAll('[data-player-id]')) {
                 if (cursorOver(row)) {
+                    guiHandled = true;
                     window.Leaderboard?.selectPlayer(parseInt(row.dataset.playerId));
                     return;
                 }
@@ -479,7 +518,7 @@ renderer.domElement.addEventListener('click', () => {
         const notifEl = document.getElementById('notif-container');
         if (notifEl) {
             for (const btn of notifEl.querySelectorAll('.notif-btn:not(:disabled)')) {
-                if (cursorOver(btn)) { btn.click(); return; }
+                if (cursorOver(btn)) { guiHandled = true; btn.click(); return; }
             }
         }
 
@@ -492,7 +531,19 @@ renderer.domElement.addEventListener('click', () => {
     }
     renderer.domElement.requestPointerLock();
 });
-overlay.addEventListener('click', () => renderer.domElement.requestPointerLock());
+let canPlaySounds = false;
+overlay.addEventListener('click', () => {
+    if (leaveButton.matches(':hover')) { return }
+    canPlaySounds=true;
+    if (window.SWORD_FIGHT) {
+        sfothThemeSong.play();
+    }
+    renderer.domElement.requestPointerLock();
+});
+let canSlice = true;
+const swordSlashSound = new Audio(importedAssets.swordSlash);
+swordSlashSound.preload = "auto";
+swordSlashSound.volume = 0.8;
 renderer.domElement.addEventListener('mousedown', e => {
     if (e.button === 2) { rmb = true; return; }
     if (e.button === 0 && locked) {
@@ -501,6 +552,18 @@ renderer.domElement.addEventListener('mousedown', e => {
             for (const slider of panel.querySelectorAll('input[type=range]')) {
                 if (_cursorOver(slider)) { _sliderDrag = slider; return; }
             }
+        }
+        if (!playerSpecialValues.slicing && canSlice) {
+            playerSpecialValues.slicing = true;
+            canSlice = false
+            swordSlashSound.currentTime = 0;
+            swordSlashSound.play();
+            setTimeout(() => {
+                playerSpecialValues.slicing = false;
+                setTimeout(() => {
+                    canSlice = true
+                }, 100);
+            }, 500);
         }
     }
 });
@@ -785,7 +848,7 @@ function resolveOBBV(nearby) {
     }
 }
 
-function resolveBlocksH(nearby,dt) {
+function resolveBlocksH(nearby, dt) {
     stepUpTarget = -Infinity;
     pushedBlocks.clear();
     const cx = character.position.x, cz = character.position.z;
@@ -814,16 +877,16 @@ function resolveBlocksH(nearby,dt) {
 
         const { ov0, ov1, dx, dz } = r;
         if (ov0 <= ov1) {
-            character.position.x -= Math.sign(dx) * Math.min(ov0,STEP_CLIMB_SPEED*dt);
+            character.position.x -= Math.sign(dx) * Math.min(ov0, STEP_CLIMB_SPEED * dt);
         } else {
-            character.position.z -= Math.sign(dz) * Math.min(ov1,STEP_CLIMB_SPEED*dt);
+            character.position.z -= Math.sign(dz) * Math.min(ov1, STEP_CLIMB_SPEED * dt);
         }
         pushedBlocks.add(b);
     }
 }
 
 
-function resolveBlocksV(nearby,dt) {
+function resolveBlocksV(nearby, dt) {
     const cx = character.position.x, cz = character.position.z;
     const ry = character.rotation.y;
     const co = Math.cos(ry), si = Math.sin(ry);
@@ -843,8 +906,8 @@ function resolveBlocksV(nearby,dt) {
         if (oyU <= oyD) {
             let goal = b.maxY + CHAR_FOOT_OFFSET;
             let change = goal - character.position.y;
-            if(change>0){
-                grounded=true;
+            if (change > 0) {
+                grounded = true;
             }
             character.position.y += Math.sign(change) * Math.min(Math.abs(change), STEP_CLIMB_SPEED * dt);
             if (velY <= 0) { velY = 0; grounded = true; extraVelX = 0; extraVelZ = 0; }
@@ -979,7 +1042,7 @@ function tryLedgeGrab(nearby) {
 function update(dt) {
     if (!character) return;
 
-    dt = Math.min(dt,0.05);
+    dt = Math.min(dt, 0.05);
 
     if (keys['KeyI']) cam.distance = Math.max(cam.minDist, cam.distance - CAM_KEY_ZOOM_SPEED * dt);
     if (keys['KeyO']) cam.distance = Math.min(cam.maxDist, cam.distance + CAM_KEY_ZOOM_SPEED * dt);
@@ -1194,7 +1257,7 @@ function update(dt) {
 
     const nearby = getNearbyColliders(character.position.x, character.position.y, character.position.z);
 
-    resolveBlocksH(nearby,dt);
+    resolveBlocksH(nearby, dt);
     resolveOBBH(nearby);
     tryLedgeGrab(nearby);
 
@@ -1215,7 +1278,7 @@ function update(dt) {
         extraVelX = 0; extraVelZ = 0;
     }
 
-    resolveBlocksV(nearby,dt);
+    resolveBlocksV(nearby, dt);
     resolveOBBV(nearby);
 
     if (jumpBuffer > 0 && (grounded || coyoteTimer > 0)) {
@@ -1247,12 +1310,92 @@ function updateCamera() {
         pivot.z += -sinYaw * SHIFT_LOCK_OFFSET;
     }
 
+    if (typeof playerSpecialValues != 'undefined' && playerSpecialValues.health <= 0) {
+        return;
+    }
+
     camera.position.set(
         pivot.x + cam.distance * cosPitch * sinYaw,
         pivot.y + cam.distance * sinPitch,
         pivot.z + cam.distance * cosPitch * cosYaw
     );
     camera.lookAt(pivot);
+}
+
+const oofSound = new Audio(importedAssets.oofSound)
+sfothThemeSong.preload = "auto";
+sfothThemeSong.volume = 1;
+let sword;
+let loadingSword = false;
+let died = false;
+function swordUpdate() {
+    if (!window.SWORD_FIGHT) return;
+    setRot(anim.bones.Right_Arm, 'x', -Math.PI * 0.5, 1, 1);
+    if (typeof playerSpecialValues == 'undefined') return
+    if (!character) return
+    if (!anim.bones.Right_Arm) return
+    anim.bones.Right_Arm.position.y = 1.5
+    anim.bones.Right_Arm.position.z = -0.5
+    if (!loadingSword) {
+        loadingSword = true;
+        fbxLoader.load(importedAssets.swordMdl, (fbx) => {
+            fbx.scale.multiplyScalar(0.005);
+            sword = fbx;
+            sword.castShadow = true;
+            sword.receiveShadow = true;
+            sword.rotation.order = 'YXZ';
+            scene.add(sword);
+        });
+    }
+    let fwdx = Math.sin(character.rotation.y);
+    let fwdz = Math.cos(character.rotation.y);
+    let rx = -Math.cos(character.rotation.y);
+    let rz = Math.sin(character.rotation.y);
+
+    let slicing = playerSpecialValues.slicing
+
+    let fwd = slicing ? 3.2 : 1.5;
+    let right = 1.5;
+    let up = slicing ? 1.5 : 2.8;
+
+    let x = character.position.x + rx * right + fwdx * fwd;
+    let y = character.position.y + up;
+    let z = character.position.z + rz * right + fwdz * fwd;
+
+    if (!sword) return
+
+    sword.position.set(x, y, z);
+    sword.rotation.y = character.rotation.y;
+    sword.rotation.x = slicing ? Math.PI * 0.5 : 0
+
+    if(window.VOID_DIE && character.position.y<=CHAR_STAND_Y+1){
+        playerSpecialValues.health = -999;
+    }
+
+    if (playerSpecialValues.health <= 0 && !died) {
+        if (canPlaySounds) {
+            oofSound.play()
+        }
+        let sp = window.chooseSpawnPoint();
+        _spawnPoint.x = sp.x;
+        _spawnPoint.y = sp.y+CHAR_FOOT_OFFSET;
+        _spawnPoint.z = sp.z;
+
+        character.position.x = _spawnPoint.x + 9999;
+        character.position.y = _spawnPoint.y + 9999;
+        character.position.z = _spawnPoint.z + 9999;
+
+        setTimeout(() => {
+            died = false;
+            velY = 0;
+            character.position.x = _spawnPoint.x;
+            character.position.y = _spawnPoint.y;
+            character.position.z = _spawnPoint.z;
+            character.rotation.y = _spawnPoint.ry
+            playerSpecialValues.health = 1;
+        }, 1500);
+    }
+
 }
 
 let lastTime = performance.now();
@@ -1263,6 +1406,7 @@ function loop(now) {
     lastTime = now;
 
     update(dt);
+    swordUpdate(dt);
     updateCamera();
 
     if (charDebugMesh && character) {
