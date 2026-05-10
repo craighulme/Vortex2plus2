@@ -83,6 +83,7 @@
             spawnPoints: [[330, 100, 27]],
 
             SWORD_FIGHT: true,
+            VOID_DIE: false,
         }, //added by Inuk, 6/5/2026, added a ramp to enter the map more easily
 
         {
@@ -101,7 +102,25 @@
 
             SWORD_FIGHT: true,
             VOID_DIE: true,
-        }, //added by Inuk, 9/5/2026, added a ramp to enter the map more easily
+        }, //added by Inuk, 9/5/2026
+
+        {
+            name: "Sword pvp baseplate",
+            url: "https://pastebin.com/raw/5Kf08aWP",
+            picture: "https://i.imgur.com/18tY4J2.png",
+            bannerpicture: "https://i.imgur.com/mu68Bvp.png",
+            description: "Custom made simple pvp map by Inuk",
+            creatorName: 'Inuk',
+            creatorId: 1961,
+            gameId: -2,
+
+            spawnPoints: [[10,10,10],[-10,10,10],[10,10,-10],[-10,10,-10]],
+
+            skyColor: 0xA00000,
+
+            SWORD_FIGHT: true,
+            VOID_DIE: false,
+        }, //added by Inuk, 10/5/2026
     ];
 
     function defSpawnPoint() {
