@@ -68,7 +68,6 @@
         });
     }
 
-    // maps, currently just crossroads. add more.
     const maps = [
         {
             name: "Crossroads",
@@ -114,7 +113,7 @@
             creatorId: 1961,
             gameId: -3,
 
-            spawnPoints: [[10,10,10],[-10,10,10],[10,10,-10],[-10,10,-10]],
+            spawnPoints: [[10, 10, 10], [-10, 10, 10], [10, 10, -10], [-10, 10, -10]],
 
             skyColor: 0xA00000,
 
@@ -130,7 +129,7 @@
         return { x: cx, y: cy, z: cz }
     }
     function chooseSpawnPoint(m) {
-        if(!m) return defSpawnPoint()
+        if (!m) return defSpawnPoint()
         let entry = m.spawnPoints[Math.round(Math.random() * (m.spawnPoints.length - 1))]
         let cx = entry[0]
         let cy = entry[1]
@@ -145,7 +144,7 @@
     var gamei = url.searchParams.get("VPlusGameId");
     if (gamei) {
         let map = maps[gamei]
-        window.map=map;
+        window.map = map;
         let gameid = map.gameId
         if (map.SWORD_FIGHT) {
             window.SWORD_FIGHT = true;
@@ -160,8 +159,8 @@
             configurable: false
         });
         console.log(`game id set to ${gameid}`);;
-    }else{
-        window.map=false;
+    } else {
+        window.map = false;
     }
     async function initialize() {
         if (document.location.pathname == '/home' || document.location.pathname == '/social' || document.location.pathname == '/search' || document.location.pathname == '/games/2') {
@@ -298,11 +297,13 @@
 
             // title
             const title = document.createElement('div');
-            title.textContent = "Maps";
+            title.textContent = "Vortex 2+2 Maps";
             Object.assign(title.style, {
                 fontSize: "14px",
                 fontWeight: "700",
-                color: "#fff"
+                color: "#fff",
+                width: '100%',
+                height: '30px'
             });
             panel.appendChild(title);
 
@@ -328,6 +329,8 @@
                     btn.onmouseleave = () => btn.style.background = "#2563EB";
                 }
             }
+            let collapsibles = {};
+            let ci = 0;
             // map buttons!!
             maps.forEach(map => {
                 const btn = document.createElement('button');
@@ -351,6 +354,8 @@
                         loaded = true
                     }
                 };
+                collapsibles[ci] = btn;
+                ci++;
                 renderer.domElement.addEventListener('click', () => {
                     if (locked) {
                         if (_cursorOver(btn)) {
@@ -374,12 +379,16 @@
                 background: "rgba(255,255,255,0.08)",
                 color: "#fff"
             });
+            collapsibles[ci] = input;
+            ci++;
 
             panel.appendChild(input);
 
             // custom url loader button
             const loadBtn = document.createElement('button');
             loadBtn.textContent = "Load URL";
+            collapsibles[ci] = loadBtn;
+            ci++;
 
             styleBtn(loadBtn, "primary");
 
@@ -395,6 +404,23 @@
             };
 
             panel.appendChild(loadBtn);
+
+            title.onclick = function () {
+                for (let i = 0; i < ci; i++) {
+                    collapsibles[i].style.display = collapsibles[i].style.display == 'none' ? 'block' : 'none'
+                }
+            }
+            renderer.domElement.addEventListener('click', () => {
+                if (_cursorOver(title)) {
+                    for (let i = 0; i < ci; i++) {
+                        collapsibles[i].style.display = collapsibles[i].style.display == 'none' ? 'block' : 'none'
+                    }
+                }
+            })
+
+            for (let i = 0; i < ci; i++) {
+                collapsibles[i].style.display = 'none'
+            }
 
             console.log('loading');
             // finally, add the gui to the page

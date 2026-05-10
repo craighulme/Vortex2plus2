@@ -105,7 +105,7 @@ function _setPosY(bones, rest, name, offset, sp, dt) {
 }
 
 let swords = new Map()
-function _animateRemote(r, dt) {
+function _animateRemote(id,r, dt) {
     const { bones, rest } = r.meshes;
     const sp = 12;
     r.animTime += dt;
@@ -164,8 +164,10 @@ function _animateRemote(r, dt) {
         _setB(bones, rest, 'Right_Arm', 'x', -Math.PI * 0.5, 1, 1);
         bones.Right_Arm.position.y = 1.5
         bones.Right_Arm.position.z = -0.5
-        let sword = swords.get(r.id);
+        let sword = swords.get(id);
         if (!sword) {
+            console.log('no sword for id '+id+', making one now!')
+            sword=true;
             fbxLoader.load(importedAssets.swordMdl, (fbx) => {
                 fbx.scale.multiplyScalar(0.005);
                 sword = fbx;
@@ -180,35 +182,36 @@ function _animateRemote(r, dt) {
         if (sword === true) {
             return
         }
-        let grp = r.meshes.grp;
-        let fwdx = Math.sin(grp.rotation.y);
-        let fwdz = Math.cos(grp.rotation.y);
-        let rx = -Math.cos(grp.rotation.y);
-        let rz = Math.sin(grp.rotation.y);
+        let g = r.meshes.grp;
+        let pos = g.position;
+        let ry = g.rotation.y;
+        let fwdx = Math.sin(ry);
+        let fwdz = Math.cos(ry);
+        let rx = -Math.cos(ry);
+        let rz = Math.sin(ry);
 
-        if (!customPlayerData[r.id]) {
+        if (!customPlayerData[id]) {
             return;
         }
 
-        let slicing = customPlayerData[r.id].slicing
+        let slicing = customPlayerData[id].slicing
 
         let fwd = slicing ? 3.2 : 1.5;
         let right = 1.5;
         let up = slicing ? 1.5 : 2.8;
 
-        let x = r.meshes.grp.position.x + rx * right + fwdx * fwd;
-        let y = r.meshes.grp.position.y + up;
-        let z = r.meshes.grp.position.z + rz * right + fwdz * fwd;
+        let x = pos.x + rx * right + fwdx * fwd;
+        let y = pos.y + up;
+        let z = pos.z + rz * right + fwdz * fwd;
 
         sword.position.set(x, y, z);
-        sword.rotation.y = grp.rotation.y;
+        sword.rotation.y = ry;
         sword.rotation.x = slicing ? Math.PI * 0.5 : 0
 
         if (slicing) {
-            let charpos = character.position;
-            let dx = (x - rx * 0.5) - charpos.x;
-            let dy = y - charpos.y;
-            let dz = (z - rz * 0.5) - charpos.z;
+            let dx = (x - rx * 0.5) - character.position.x;
+            let dy = y - character.position.y;
+            let dz = (z - rz * 0.5) - character.position.z;
             let distsq = (dx * dx + dy * dy + dz * dz);
             if (distsq < 7) {
                 playerSpecialValues.health -= dt * 0.5;
@@ -537,6 +540,12 @@ function decodeNetworkData(playerData, r) {
 
     let healthBits = (specialState >>> 0) & ((1 << 4) - 1);
     let slicingBits = (specialState >>> 4) & ((1 << 1) - 1);
+    if(!customPlayerData[playerData.id]) {
+        customPlayerData[playerData.id]={
+            health: 1,
+            slicing: false,
+        }
+    }
     if (customPlayerData[playerData.id]) {
         customPlayerData[playerData.id].health = healthBits / 15;
         customPlayerData[playerData.id].slicing = (slicingBits > 0);
@@ -758,7 +767,6 @@ function stopBroadcast() {
 }
 
 const LERP = 12;
-const ANIM_DIST_SQ = 80 * 80;
 
 window._mpUpdate = function (dt) {
     if (_pendingAvatars.size > 0 && _vortex.getCharacter()) {
@@ -776,7 +784,7 @@ window._mpUpdate = function (dt) {
     const cam = _vortex.getCamera?.();
     const camPos = cam ? cam.position : null;
 
-    for (const [, r] of remotes) {
+    for (const [key, r] of remotes) {
         if (!r.meshes) continue;
 
         const g = r.meshes.grp;
@@ -790,8 +798,8 @@ window._mpUpdate = function (dt) {
         if (g.rotation.y > Math.PI) g.rotation.y -= 2 * Math.PI;
         else if (g.rotation.y < -Math.PI) g.rotation.y += 2 * Math.PI;
 
-        if (!camPos || g.position.distanceToSquared(camPos) < ANIM_DIST_SQ) {
-            _animateRemote(r, dt);
+        if (!camPos) {
+            _animateRemote(key,r, dt);
         }
     }
 

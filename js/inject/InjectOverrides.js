@@ -31,14 +31,11 @@ function start() {
     const url = new URL(document.URL);
     const gamei = url.searchParams.get("VPlusGameId");
     document.body.prepend(scripts)
-    loadScript(chrome.runtime.getURL("overrides/vortex2+2-engine.js"), () => {
-        loadScript(chrome.runtime.getURL("overrides/vortex2+2-multiplayer.js"), () => {
-            if (!gamei&&url.pathname=='/demo') {
-                loadScript(chrome.runtime.getURL("overrides/demoparts.js"));
-            }
-        });
-    });
+    if (!gamei && url.pathname == '/demo') {
+        loadScript(chrome.runtime.getURL("overrides/demoparts.js"));
+    }
 }
+
 
 
 if (document.readyState === "loading") {
