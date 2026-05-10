@@ -1,4 +1,6 @@
 Vortex2+2 is an extension for [vortex](https://vortex.towerstats.com/) to add many more features
+Please join the [discord server](https://discord.gg/yMSKVKSVxZ) to get early releases and sneak peaks, and submit suggestions for vortex2+2!
+
 current features are:
 - Clean custom dark ui
 - Map loader
@@ -7,7 +9,8 @@ current features are:
 - 2 Custom games
 - Fully functional multiplayer health and sword system
 
-It is currently not compatible with Vortex+, I'll try to make it compatible in the next update!
+It is currently not compatible with Vortex+, 
+**Please disable Vortex+ when using Vortex2+2, or it won't work**
 
 installation:
 1. download the latest release
@@ -17,5 +20,4 @@ installation:
 5. press 'load unpacked' and select the folder containing this file!
 
 
-We do not yet have a Discord server, but I'm working on it!
 If you like vortex2+2 please consider starring this github and sharing this with your friends!
