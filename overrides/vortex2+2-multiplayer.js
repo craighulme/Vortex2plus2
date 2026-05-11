@@ -67,21 +67,24 @@ function _makeNameLabel(username) {
     return spr;
 }
 
-function makeRemote(username, id) {
-    const clone = _clonePlayerFBX();
-    if (!clone) return null;
+function makeRemote(username, id, shirtUrl) {
+    const grp = _clonePlayerFBX();
+    if (!grp) return null;
 
     const fo = _vortex.getCharFootOffset();
     const ch = _vortex.getCharHeight();
     const spr = _makeNameLabel(username);
     spr.position.y = ch - fo + 1.4;
-    clone.add(spr);
+    grp.add(spr);
 
     const bones = {};
-    clone.traverse(n => { if (_isBone(n)) bones[n.name] = n; });
+    grp.traverse(n => { if (_isBone(n)) bones[n.name] = n; });
     const rest = _vortex.getAnimRest();
-
-    return { grp: clone, bones, rest, id: id };
+    const shirtMesh = _vortex.buildShirtOverlay(grp);
+    if (shirtMesh && shirtUrl) {
+        _vortex.applyShirtToMesh(shirtMesh, shirtUrl);
+    }
+    return { grp, bones, rest, shirtMesh };
 }
 
 function disposeRemote(m) {
@@ -594,7 +597,7 @@ function handle(d) {
             Leaderboard.setMyId(myId);
             Leaderboard.addPlayer({ id: myId, username: d.username, is_staff: d.is_staff, is_booster: d.is_booster });
             for (const p of d.players) {
-                addRemote(p.id, p.username, p.is_staff, p.is_booster);
+                addRemote(p.id, p.username, p.is_staff, p.is_booster, p.shirt_id);
                 _showHealthBar(p.id)
             }
             if (d.shirt_id) {
@@ -607,7 +610,7 @@ function handle(d) {
 
         case 'join': {
             if (d.id === myId) break;
-            addRemote(d.id, d.username, d.is_staff, d.is_booster);
+            addRemote(d.id, d.username, d.is_staff, d.is_booster, d.shirt_id);
             _showHealthBar(d.id);
             Chat.systemPlayer(d.username, `${d.username} joined.`, false);
             break;
@@ -666,8 +669,8 @@ function handle(d) {
             if (rp?.meshes) {
                 _vortex.applyShirtToMesh(rp.meshes.shirtMesh, d.shirt_id ? "/assets/clothing/" + d.shirt_id + ".png" : null);
             } else {
-                const pending = pendingPlayers.get(msg.id);
-                if (pending) pending.shirt_id = msg.shirt_id;
+                const pending = _pendingAvatars.get(d.id);
+                if (pending) pending.shirt_id = d.shirt_id;
             }
             break;
         }
@@ -717,12 +720,12 @@ window._mpSetFriendStatus = function (id, status) {
     Leaderboard.setFriendStatus(id, status);
 };
 
-function addRemote(id, username, is_staff, is_booster) {
+function addRemote(id, username, is_staff, is_booster, shirtId) {
     if (remotes.has(id)) return;
-
+    const shirtUrl = shirtId ? "/assets/clothing/" + shirtId + ".png" : null;
     let meshes = null;
-    if (_vortex.getCharacter()) { try { meshes = makeRemote(username, id); } catch (e) { console.error('[mp] makeRemote failed:', e); } }
-    if (!meshes) _pendingAvatars.set(id, { username, is_staff, is_booster });
+    if (_vortex.getCharacter()) { try { meshes = makeRemote(username, id, shirtUrl); } catch (e) { console.error('[mp] makeRemote failed:', e); } }
+    if (!meshes) _pendingAvatars.set(id, { username, is_staff: isStaff, is_booster: isBooster, shirt_id: shirtId });
 
     remotes.set(id, {
         meshes,
@@ -804,7 +807,12 @@ window._mpUpdate = function (dt) {
         for (const [id, info] of _pendingAvatars) {
             const r = remotes.get(id);
             if (r && !r.meshes) {
-                try { r.meshes = makeRemote(info.username, id); } catch (e) { console.error('[mp] makeRemote failed:', e); }
+                try {
+                    r.meshes = makeRemote(info.username, id, info.shirt_id ? "/assets/clothing/" + info.shirt_id + ".png" : null);
+                } catch (e) {
+                    console.error('[mp] makeRemote failed:', e);
+                }
+
                 if (r.meshes) r.meshes.grp.visible = false;
             }
         }
@@ -841,3 +849,14 @@ window._mpSendChat = function (msg) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'chat', msg }));
 }
+
+window._mpCreateDummy = function (x, y, z, shirtUrl, ry = 0) {
+    const char = _clonePlayerFBX();
+    if (!char) return
+    char.position.set(x, y, z);
+    char.rotation.y = ry;
+    char.visible = true;
+    const sm = _vortex.buildShirtOverlay(char);
+    if (sm && shirtUrl) _vortex.applyShirtToMesh(sm, shirtUrl);
+    return char;
+};
