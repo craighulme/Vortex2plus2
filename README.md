@@ -2,7 +2,6 @@ Vortex2+2 is an extension for [vortex](https://vortex.towerstats.com/) to add ma
 Please join the [Vortex2+2 & AIS discord server](https://discord.gg/3Rphp3duKR) to get early releases and sneak peaks, and submit suggestions for vortex2+2 and AIS!
 
 *This project is independently developed and is not a fork of Vortex+/VortexPro.*
-*The owner of Vortex+/VortexPro is known for harassing people and spreading misinformation about Vortex2+2*
 
 Credits:
 - Search engine originally created by enk, modified and used with permission
