@@ -110,6 +110,21 @@ const maps = [
 
         BUILD_MODE: true,
     }, //added by Inuk, 10/5/2026
+
+    {
+        name: "PARTY.exe",
+        url: "https://pastebin.com/raw/uWkAURvH",
+        picture: "https://tr.rbxcdn.com/180DAY-0e38f156d98eb9095dc7c652caf2afcb/352/352/Image/Png/noFilter",
+        bannerpicture: "https://tr.rbxcdn.com/180DAY-b87e0753f91e85fd11c55391517d676c/768/432/Image/Webp/noFilter",
+        description: "Simple testing game made by exelerantt to test out his vortex 2+2 addon.",
+        creatorName: "exelerantt",
+        creatorId: 2162,
+        gameId: -45659278, // party.exe game id XD
+
+        spawnPoints: [[53, 60, 0]],
+
+        VOID_DIE: true
+    }, // added by exelerantt, 5/14/26 (american date)
 ];
 
 function defSpawnPoint() {
