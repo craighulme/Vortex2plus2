@@ -53,10 +53,11 @@
         "overrides/*",
         "img/textures/*",
         "mdl/*",
-        "sounds/*"
+        "sounds/*",
+        "files/*"
       ],
       "matches": [
-        "https://vortex.towerstats.com/*"
+        "<all_urls>"
       ]
     }
   ],

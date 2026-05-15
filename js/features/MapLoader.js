@@ -18,8 +18,65 @@ async function loadMapUrl(name, url, REMOVE_BASEPLATE) {
         mapsLoaded[name][i] = mesh
     }
 
+    // gonna admit some of this is vibe coded
+    // as in the way i got this, i did not copy and paste !!!
+
+    try {
+        scene.traverse(obj => {
+            if (obj.isMesh || obj.type === 'Mesh' || obj.isGridHelper) {
+                let width = 0;
+                let length = 0;
+
+                if (obj.geometry) {
+                    if (!obj.geometry.boundingBox) {
+                        obj.geometry.computeBoundingBox();
+                    }
+                    const box = obj.geometry.boundingBox;
+                    if (box) {
+                        width = (box.max.x - box.min.x) * obj.scale.x;
+                        length = (box.max.z - box.min.z) * obj.scale.z;
+                    }
+                }
+
+                if (width === 0 || length === 0) {
+                    width = obj.scale.x;
+                    length = obj.scale.z;
+                }
+
+                if (width >= 100 && length >= 100) {
+                    if (obj.name !== "Player" && !obj.isBone && obj.type !== 'Bone') {
+                        obj.visible = !REMOVE_BASEPLATE;
+
+                        if (obj.geometry) obj.geometry.dispose();
+                        if (obj.material) {
+                            if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                            else obj.material.dispose();
+                        }
+                    }
+                }
+            }
+        });
+    } catch (err) {
+        // no i dont wanna hear you anymore
+    }
+}
+
+async function loadMapData(name, asset, REMOVE_BASEPLATE) {
+    console.log("Loading map:", name, asset);
+    let f = await fetch(importedAssets.mapdata[asset])
+    let r = await f.text()
+
+    let mapData = JSON.parse(r)
+    let deg2rad = 0.0174532925;
+    mapsLoaded[name] = []
+    for (let i = 0; i < mapData.length; i++) {
+        let v = mapData[i]
+        let mesh, _ = addStud(v.S[0], v.S[1], v.S[2], Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], v.R[0] * deg2rad, v.R[1] * deg2rad, v.R[2] * deg2rad)
+        mapsLoaded[name][i] = mesh
+    }
+
     if (REMOVE_BASEPLATE) {
-        // gonna admit some of this is vibe coded
+        // gonna admit some of this is made by ai
         // as in the way i got this, i did not copy and paste !!!
 
         try { 
@@ -94,7 +151,7 @@ function unloadMap(name) {
 const maps = [
     {
         name: "Crossroads",
-        url: "https://pastebin.com/raw/5sRJkYLN",
+        url: "window._importedAssets.Crossroads",
         picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/crossroads.png",
         bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/crossroads.jpeg",
         description: "Classic Roblox Crossroads map!",
@@ -109,7 +166,7 @@ const maps = [
 
     {
         name: "Sword Fights on the Heights",
-        url: "https://pastebin.com/raw/DRyzkQ7s",
+        url: "window._importedAssets.SFOTH",
         picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/sfoth.webp",
         bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/swordfightingbaseplate.png",
         description: "Classic Roblox Sword Fights on the Heights map, with sword system made by Inuk!",
@@ -127,7 +184,7 @@ const maps = [
 
     {
         name: "Sword pvp baseplate",
-        url: "https://pastebin.com/raw/5Kf08aWP",
+        url: "window._importedAssets.SFBaseplate",
         picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/sfoth.webp",
         bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/swordfightingbaseplate.png",
         description: "Custom made simple pvp map by Inuk",
@@ -144,7 +201,7 @@ const maps = [
 
     {
         name: "Vortex2+2 Building game",
-        url: "https://pastebin.com/raw/pJY1RC43",
+        url: "window._importedAssets.BuildingPlace",
         picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/buildingplace.png",
         bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/buildingplace.jpeg",
         description: "Custom made game building game with autosave and multiplayer support!",
@@ -161,7 +218,7 @@ const maps = [
 
     {
         name: "PARTY.exe",
-        url: "https://pastebin.com/raw/uWkAURvH",
+        url: "window._importedAssets.PARTYexe",
         picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/party-exe.png",
         bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/party-exe.webp",
         description: "Simple testing game made by exelerantt to test out his vortex 2+2 addon.",
@@ -174,6 +231,19 @@ const maps = [
         VOID_DIE: true, // you fall into the void and DIE... you cannot walk around that one
         REMOVE_BASEPLATE: true
     }, // added by exelerantt, 5/14/26 (american date)
+
+    {
+        name: "Baseplate",
+        url: "",
+        picture: "https://tr.rbxcdn.com/180DAY-0023459e3957978e242c1d270dafbae2/352/352/Image/Png/noFilter",
+        bannerpicture: "https://tr.rbxcdn.com/180DAY-1d29750b06e247dc4ad9dbf2b4aaa10e/768/432/Image/Png/noFilter",
+        description: "Just your average baseplate.",
+        creatorName: "exelerantt",
+        creatorId: 2162,
+        gameId: -95206881, // Baseplate game id
+
+        spawnPoints: [[0, 15, 0]],  
+    }
 
     // {
     //     name: "Fencing",
@@ -356,7 +426,11 @@ async function initialize() {
             let spawn = window.chooseSpawnPoint(tmap)
             window._vortex.setSpawn(spawn.x, spawn.y, spawn.z, 0);
 
-            loadMapUrl(tmap.name, tmap.url, tmap.REMOVE_BASEPLATE)
+            if (tmap.url.startsWith("window.")) {
+                loadMapData(tmap.name, tmap.url.split(".")[2], tmap.REMOVE_BASEPLATE)
+            } else {
+                loadMapUrl(tmap.name, tmap.url, tmap.REMOVE_BASEPLATE)
+            }
 
             if (tmap.skyColor) {
                 scene.fog = new THREE.Fog(tmap.skyColor, 192, 480);
@@ -435,7 +509,11 @@ async function initialize() {
                     btn.innerHTML = map.name + '(Not loaded)'
                     loaded = false
                 } else {
-                    loadMapUrl(map.name, map.url);
+                    if (map.url.startsWith("window.")) {
+                        loadMapData(map.name, map.url.split(".")[2], map.REMOVE_BASEPLATE)
+                    } else {
+                        loadMapUrl(map.name, map.url, map.REMOVE_BASEPLATE)
+                    }
                     let spawn = window.chooseSpawnPoint(map)
                     window._vortex.setSpawn(spawn.x, spawn.y, spawn.z, 0);
                     btn.innerHTML = map.name + '(Loaded)'
