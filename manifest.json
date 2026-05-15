@@ -51,7 +51,7 @@
         "js/*",
         "settings/*",
         "overrides/*",
-        "img/textures/*",
+        "img/*",
         "mdl/*",
         "sounds/*",
         "files/*"

@@ -18,6 +18,26 @@ const importedAssets = {
         Crossroads: chrome.runtime.getURL("files/mapdata/Crossroads.json"),
         SFBaseplate: chrome.runtime.getURL("files/mapdata/SFBaseplate.json"),
         SFOTH: chrome.runtime.getURL("files/mapdata/SFOTH.json"),
+    },
+
+    imgdata: {
+        banners: {
+            buildingplace: chrome.runtime.getURL("img/games/website/banners/buildingplace.jpeg"),
+            crossroads: chrome.runtime.getURL("img/games/website/banners/crossroads.jpeg"),
+            partyexe: chrome.runtime.getURL("img/games/website/banners/party-exe.webp"),
+            sfoth: chrome.runtime.getURL("img/games/website/banners/sfoth.webp"),
+            swordfightingbaseplate: chrome.runtime.getURL("img/games/website/banners/swordfightingbaseplate.png"),
+            baseplate: chrome.runtime.getURL("img/games/website/banners/baseplate.png")
+        },
+
+        icons: {
+            buildingplace: chrome.runtime.getURL("img/games/website/icons/buildingplace.png"),
+            crossroads: chrome.runtime.getURL("img/games/website/icons/crossroads.png"),
+            partyexe: chrome.runtime.getURL("img/games/website/icons/party-exe.png"),
+            sfoth: chrome.runtime.getURL("img/games/website/icons/sfoth.webp"),
+            swordfightingbaseplate: chrome.runtime.getURL("img/games/website/icons/swordfightingbaseplate.png"),
+            baseplate: chrome.runtime.getURL("img/games/website/icons/baseplate.png")
+        }
     }
 };
 

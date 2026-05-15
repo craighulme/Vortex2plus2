@@ -158,8 +158,8 @@ const maps = [
     {
         name: "Crossroads",
         url: "window._importedAssets.Crossroads",
-        picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/crossroads.png",
-        bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/crossroads.jpeg",
+        picture: "window._importedAssets.crossroads",
+        bannerpicture: "window._importedAssets.crossroads",
         description: "Classic Roblox Crossroads map!",
         creatorName: 'Inuk',
         creatorId: 1961,
@@ -173,8 +173,8 @@ const maps = [
     {
         name: "Sword Fights on the Heights",
         url: "window._importedAssets.SFOTH",
-        picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/sfoth.webp",
-        bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/swordfightingbaseplate.png",
+        picture: "window._importedAssets.sfoth",
+        bannerpicture: "window._importedAssets.sfoth",
         description: "Classic Roblox Sword Fights on the Heights map, with sword system made by Inuk!",
         creatorName: 'Inuk',
         creatorId: 1961,
@@ -191,8 +191,8 @@ const maps = [
     {
         name: "Sword pvp baseplate",
         url: "window._importedAssets.SFBaseplate",
-        picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/sfoth.webp",
-        bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/swordfightingbaseplate.png",
+        picture: "window._importedAssets.swordfightingbaseplate",
+        bannerpicture: "window._importedAssets.swordfightingbaseplate",
         description: "Custom made simple pvp map by Inuk",
         creatorName: 'Inuk',
         creatorId: 1961,
@@ -208,8 +208,8 @@ const maps = [
     {
         name: "Vortex2+2 Building game",
         url: "window._importedAssets.BuildingPlace",
-        picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/buildingplace.png",
-        bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/buildingplace.jpeg",
+        picture: "window._importedAssets.buildingplace",
+        bannerpicture: "window._importedAssets.buildingplace",
         description: "Custom made game building game with autosave and multiplayer support!",
         creatorName: 'Inuk',
         creatorId: 1961,
@@ -225,8 +225,8 @@ const maps = [
     {
         name: "PARTY.exe",
         url: "window._importedAssets.PARTYexe",
-        picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/party-exe.png",
-        bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/party-exe.webp",
+        picture: "window._importedAssets.partyexe",
+        bannerpicture: "window._importedAssets.partyexe",
         description: "Simple testing game made by exelerantt to test out his vortex 2+2 addon.",
         creatorName: "exelerantt",
         creatorId: 2162,
@@ -241,8 +241,8 @@ const maps = [
     {
         name: "Baseplate",
         url: "",
-        picture: "https://tr.rbxcdn.com/180DAY-0023459e3957978e242c1d270dafbae2/352/352/Image/Png/noFilter",
-        bannerpicture: "https://tr.rbxcdn.com/180DAY-1d29750b06e247dc4ad9dbf2b4aaa10e/768/432/Image/Png/noFilter",
+        picture: "window._importedAssets.baseplate",
+        bannerpicture: "window._importedAssets.baseplate",
         description: "Just your average baseplate.",
         creatorName: "exelerantt",
         creatorId: 2162,
@@ -322,7 +322,7 @@ async function initialize() {
         // game buttons!
         let f = await fetch('/api/game-stats')
         let gameStats = await f.json()
-        function waitForGamesLoaded() {
+        async function waitForGamesLoaded() {
             if (document.getElementById('games-grid').children.length > 0) {
                 for (let i = 0; i < maps.length; i++) {
                     let map = maps[i]
@@ -351,6 +351,12 @@ async function initialize() {
                     }
                     gcmeta.innerHTML = active + ' Playing'
                     if (map.picture) {
+                        while (!window.importedAssets) { let el = document.getElementById("_importedAssets"); if (el) window.importedAssets = JSON.parse(el.content); else await new Promise(r => setTimeout(r, 50)); }
+
+                        if (map.picture.startsWith("window.")) {
+                            map.picture = importedAssets.imgdata.icons[map.picture.split(".")[2]]
+                        }
+
                         let gcpic = document.createElement('img')
                         gcpic.alt = map.name
                         gcpic.src = map.picture
@@ -380,6 +386,13 @@ async function initialize() {
             let creatorName = map.creatorName
             let creatorId = map.creatorId
             let picture = map.bannerpicture
+            
+            while (!window.importedAssets) { let el = document.getElementById("_importedAssets"); if (el) window.importedAssets = JSON.parse(el.content); else await new Promise(r => setTimeout(r, 50)); }
+
+            if (picture.startsWith("window.")) {
+                picture = importedAssets.imgdata.banners[picture.split(".")[2]]
+            }
+
             if (gameStats[gameId]) {
                 active = gameStats[gameId].active
                 visits = gameStats[gameId].visits
@@ -390,7 +403,11 @@ async function initialize() {
                 return String(n);
             }
             const page = document.getElementById('page');
-            page.id = 'page_vplus'
+
+            await new Promise(r => setTimeout(r, 500));
+            
+            // page.id = 'page_vplus'
+            // ^ removed because it caused errors
             page.innerHTML = `
                         <div class="game-banner">
                             <img src="${picture}" alt="${map.name}">
