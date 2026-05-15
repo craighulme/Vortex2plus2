@@ -556,14 +556,6 @@ function _cursorOver(el) {
     return cursorX >= r.left && cursorX <= r.right && cursorY >= r.top && cursorY <= r.bottom;
 }
 
-const gameSong = new Audio(window.SWORD_FIGHT ? importedAssets.sfothSong : (importedAssets.buildSong));
-gameSong.loop = true;
-gameSong.preload = "auto";
-gameSong.volume = 0.9;
-gameSong.addEventListener('ended', function () {
-    this.currentTime = 0;
-    this.play();
-}, false);
 const chatEl = document.getElementById('chat-window');
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 renderer.domElement.addEventListener('click', () => {
@@ -641,14 +633,6 @@ renderer.domElement.addEventListener('click', () => {
     renderer.domElement.requestPointerLock();
 });
 let canPlaySounds = false;
-overlay.addEventListener('click', () => {
-    if (leaveButton.matches(':hover')) { return }
-    canPlaySounds = true;
-    if (window.SWORD_FIGHT||window.BUILD_MODE) {
-        gameSong.play();
-    }
-    renderer.domElement.requestPointerLock();
-});
 
 const settingsPanel = document.getElementById('settings-panel');
 settingsPanel.style.cursor = 'auto'
@@ -703,13 +687,10 @@ function makeSettingsSlider(text, min, max, def, step, onchange) {
 
 const oofSound = new Audio(importedAssets.oofSound)
 
-const primaryActionSound = new Audio(window.SWORD_FIGHT?importedAssets.swordSlash:(importedAssets.placeBlock));
+let primaryActionSound = new Audio(window.SWORD_FIGHT?importedAssets.swordSlash:(importedAssets.placeBlock));
 primaryActionSound.preload = "auto";
 primaryActionSound.volume = 0.8;
 
-makeSettingsSlider('Music volume', 0, 1, 0.9, 0.1, function (slider, val) {
-    gameSong.volume = val;
-})
 makeSettingsSlider('Sfx volume', 0, 1, 1, 0.1, function (slider, val) {
     primaryActionSound.volume = val * 0.8;
     oofSound.volume = val;
@@ -1713,7 +1694,6 @@ function updateCamera() {
     camera.lookAt(pivot);
 }
 
-gameSong.preload = "auto";
 let sword;
 let loadingSword = false;
 let died = false;
@@ -1843,6 +1823,30 @@ async function loadMap(path, tx = 0, ty = 0, tz = 0) {
         addStud(sw, sh, sd, color, px + ox, (py - sh / 2) + oy, pz + oz, rx * DEG2RAD, ry * DEG2RAD, rz * DEG2RAD);
     }
 }
+
+console.log(window.SWORD_FIGHT)
+let gameSong = new Audio(window.SWORD_FIGHT && importedAssets.sfothSong ||     importedAssets.buildSong);
+gameSong.loop = true;
+gameSong.preload = "auto";
+gameSong.volume = 0.9;
+gameSong.addEventListener('ended', function () {
+    this.currentTime = 0;
+    this.play();
+}, false);
+gameSong.preload = "auto";
+
+overlay.addEventListener('click', () => {
+    if (leaveButton.matches(':hover')) { return }
+    canPlaySounds = true;
+    if (window.SWORD_FIGHT||window.BUILD_MODE) {
+        gameSong.play();
+    }
+    renderer.domElement.requestPointerLock();
+});
+
+makeSettingsSlider('Music volume', 0, 1, 0.9, 0.1, function (slider, val) {
+    gameSong.volume = val;
+})
 
 window._vortex = {
     scene,

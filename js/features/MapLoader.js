@@ -59,6 +59,9 @@ async function loadMapUrl(name, url, REMOVE_BASEPLATE) {
     } catch (err) {
         // no i dont wanna hear you anymore
     }
+
+    gameSong = new Audio(window.SWORD_FIGHT && importedAssets.sfothSong || importedAssets.buildSong);
+    primaryActionSound = new Audio(window.SWORD_FIGHT && importedAssets.swordSlash || importedAssets.placeBlock);
 }
 
 async function loadMapData(name, asset, REMOVE_BASEPLATE) {
@@ -120,6 +123,9 @@ async function loadMapData(name, asset, REMOVE_BASEPLATE) {
             // no i dont wanna hear you anymore
         }
     }
+
+    gameSong = new Audio(window.SWORD_FIGHT && importedAssets.sfothSong ||     importedAssets.buildSong);
+    primaryActionSound = new Audio(window.SWORD_FIGHT && importedAssets.swordSlash || importedAssets.placeBlock);
 }
 
 function loadMapRaw(name, r) {
