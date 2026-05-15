@@ -3,7 +3,11 @@ Please join the [Vortex2+2 & AIS discord server](https://discord.gg/3Rphp3duKR) 
 
 Credits:
 - Search engine originally created by enk, modified and used with permission
-- SFOTH by Shedletsky (obivously)
+- Maps:
+- Crossroads by Shedletsky
+- SFOTH by Shedletsky
+- Sword fight baseplate by Inuk
+- Building game by Inuk
 - Party.exe map by 8DSK
 - Fencing map by Stickmasterluke
 
