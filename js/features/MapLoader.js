@@ -5,7 +5,7 @@
 
 let mapsLoaded = []
 
-async function loadMapUrl(name, url) {
+async function loadMapUrl(name, url, REMOVE_BASEPLATE) {
     console.log("Loading map:", name, url);
     let f = await fetch('https://cors.io/?url=' + url)
     let r = await f.json()
@@ -16,6 +16,52 @@ async function loadMapUrl(name, url) {
         let v = mapData[i]
         let mesh, _ = addStud(v.S[0], v.S[1], v.S[2], Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], v.R[0] * deg2rad, v.R[1] * deg2rad, v.R[2] * deg2rad)
         mapsLoaded[name][i] = mesh
+    }
+
+    if (REMOVE_BASEPLATE) {
+        // gonna admit some of this is vibe coded
+        // as in the way i got this, i did not copy and paste !!!
+
+        try { 
+            scene.traverse(obj => {
+                if (obj.isMesh || obj.type === 'Mesh' || obj.isGridHelper) {
+                    let width = 0;
+                    let length = 0;
+
+                    if (obj.geometry) {
+                        if (!obj.geometry.boundingBox) {
+                            obj.geometry.computeBoundingBox();
+                        }
+                        const box = obj.geometry.boundingBox;
+                        if (box) {
+                            width = (box.max.x - box.min.x) * obj.scale.x;
+                            length = (box.max.z - box.min.z) * obj.scale.z;
+                        }
+                    }
+
+                    if (width === 0 || length === 0) {
+                        width = obj.scale.x;
+                        length = obj.scale.z;
+                    }
+
+                    // Target the large floor baseplate
+                    if (width >= 100 && length >= 100) {
+                        if (obj.name !== "Player" && !obj.isBone && obj.type !== 'Bone') {
+                            scene.remove(obj);
+                            obj.visible = false;
+                            
+                            if (obj.geometry) obj.geometry.dispose();
+                            if (obj.material) {
+                                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                                else obj.material.dispose();
+                            }
+                        }
+                    }
+                }
+            });
+        } catch(err) {
+            // no i dont wanna hear you anymore
+        }
     }
 }
 
@@ -125,7 +171,8 @@ const maps = [
 
         spawnPoints: [[53, 60, 0]],
 
-        VOID_DIE: true // you fall into the void and DIE... you cannot walk around that one
+        VOID_DIE: true, // you fall into the void and DIE... you cannot walk around that one
+        REMOVE_BASEPLATE: true
     }, // added by exelerantt, 5/14/26 (american date)
 
     // {
@@ -177,6 +224,9 @@ window.chooseSpawnPoint = chooseSpawnPoint;
         }
         if (map.BUILD_MODE) {
             window.BUILD_MODE = true;
+        }
+        if (map.REMOVE_BASEPLATE) {
+            window.REMOVE_BASEPLATE = true;
         }
         const s = document.createElement("script");
         Object.defineProperty(window, "GAME_ID", {
@@ -306,7 +356,7 @@ async function initialize() {
             let spawn = window.chooseSpawnPoint(tmap)
             window._vortex.setSpawn(spawn.x, spawn.y, spawn.z, 0);
 
-            loadMapUrl(tmap.name, tmap.url)
+            loadMapUrl(tmap.name, tmap.url, tmap.REMOVE_BASEPLATE)
 
             if (tmap.skyColor) {
                 scene.fog = new THREE.Fog(tmap.skyColor, 192, 480);
