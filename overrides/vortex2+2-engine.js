@@ -556,14 +556,7 @@ function _cursorOver(el) {
     return cursorX >= r.left && cursorX <= r.right && cursorY >= r.top && cursorY <= r.bottom;
 }
 
-const gameSong = new Audio(window.SWORD_FIGHT ? importedAssets.sfothSong : (importedAssets.buildSong));
-gameSong.loop = true;
-gameSong.preload = "auto";
-gameSong.volume = 0.9;
-gameSong.addEventListener('ended', function () {
-    this.currentTime = 0;
-    this.play();
-}, false);
+
 const chatEl = document.getElementById('chat-window');
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 renderer.domElement.addEventListener('click', () => {
@@ -576,10 +569,10 @@ renderer.domElement.addEventListener('click', () => {
         const getButton = document.getElementById("pm-get");
         const cancelButton = document.getElementById('pm-cancel')
 
-        if (getButton && _cursorOver(getButton)){
+        if (getButton && _cursorOver(getButton)) {
             getButton.click();
         }
-        if (cancelButton && _cursorOver(cancelButton)){
+        if (cancelButton && _cursorOver(cancelButton)) {
             cancelButton.click();
         }
 
@@ -641,10 +634,22 @@ renderer.domElement.addEventListener('click', () => {
     renderer.domElement.requestPointerLock();
 });
 let canPlaySounds = false;
+let loadedSong = false;
+let gameSong;
 overlay.addEventListener('click', () => {
     if (leaveButton.matches(':hover')) { return }
     canPlaySounds = true;
-    if (window.SWORD_FIGHT||window.BUILD_MODE) {
+    if (window.SWORD_FIGHT || window.BUILD_MODE) {
+        if (!loadedSong) {
+            gameSong = new Audio(window.SWORD_FIGHT ? importedAssets.sfothSong : (importedAssets.buildSong));
+            gameSong.loop = true;
+            gameSong.preload = "auto";
+            gameSong.volume = 0.9;
+            gameSong.addEventListener('ended', function () {
+                this.currentTime = 0;
+                this.play();
+            }, false);
+        }
         gameSong.play();
     }
     renderer.domElement.requestPointerLock();
@@ -703,15 +708,21 @@ function makeSettingsSlider(text, min, max, def, step, onchange) {
 
 const oofSound = new Audio(importedAssets.oofSound)
 
-const primaryActionSound = new Audio(window.SWORD_FIGHT?importedAssets.swordSlash:(importedAssets.placeBlock));
-primaryActionSound.preload = "auto";
-primaryActionSound.volume = 0.8;
+const slashSound = new Audio(importedAssets.swordSlash);
+slashSound.preload = "auto";
+slashSound.volume = 0.8;
+const clickSound = new Audio(importedAssets.placeBlock);
+clickSound.preload = "auto";
+clickSound.volume = 0.8;
 
 makeSettingsSlider('Music volume', 0, 1, 0.9, 0.1, function (slider, val) {
-    gameSong.volume = val;
+    if(gameSong){
+        gameSong.volume = val;
+    }
 })
 makeSettingsSlider('Sfx volume', 0, 1, 1, 0.1, function (slider, val) {
-    primaryActionSound.volume = val * 0.8;
+    slashSound.volume = val * 0.8;
+    clickSound.volume = val * 0.8;
     oofSound.volume = val;
 })
 
@@ -773,12 +784,12 @@ const BLOCK_COLORS = [
 
 const MAX_BLOCKS = 2000;
 
-function validPlacement(x,y,z){
-    if(myBlocks.length>=MAX_BLOCKS) return false
-    if(Math.abs(x)<10||Math.abs(z)<10) return false
-    if(Math.abs(x)>147||Math.abs(z)>147) return false
-    if(Math.abs(x)+Math.abs(z)<46) return false
-    if(y<=1.5) return false
+function validPlacement(x, y, z) {
+    if (myBlocks.length >= MAX_BLOCKS) return false
+    if (Math.abs(x) < 10 || Math.abs(z) < 10) return false
+    if (Math.abs(x) > 147 || Math.abs(z) > 147) return false
+    if (Math.abs(x) + Math.abs(z) < 46) return false
+    if (y <= 1.5) return false
     return true;
 }
 
@@ -815,7 +826,7 @@ function update_Display_Block() {
         BlockDisplayMesh.position.z = roundedPoint.z;
 
         let colhex = selectedBlockState < 1 ? 0xFF0000 : BLOCK_COLORS[selectedBlockState - 1];
-        if(!validPlacement(roundedPoint.x,roundedPoint.y,roundedPoint.z)) colhex=0xFF0000
+        if (!validPlacement(roundedPoint.x, roundedPoint.y, roundedPoint.z)) colhex = 0xFF0000
         let cb = (colhex % 0x100) / 255;
         let cg = (Math.floor(colhex / 0x100) % 0x100) / 255;
         let cr = (Math.floor(colhex / 0x10000) % 0x100) / 255;
@@ -833,7 +844,7 @@ function update_Display_Block() {
 let toolbuttons = []
 let blockCounter;
 async function makeToolButtons() {
-    if(!window.map){
+    if (!window.map) {
         setTimeout(() => {
             makeToolButtons()
         }, 100);
@@ -883,8 +894,8 @@ async function makeToolButtons() {
         }
 
         blockCounter = document.createElement('p');
-        blockCounter.style="height: 32px;color: rgb(255 255 255 / 90%) !important;position: absolute;left: 30%;width: 40%;bottom: 100px;text-align: center;text-shadow: 1px 1px 5px black;";
-        blockCounter.innerText='0/'+MAX_BLOCKS;
+        blockCounter.style = "height: 32px;color: rgb(255 255 255 / 90%) !important;position: absolute;left: 30%;width: 40%;bottom: 100px;text-align: center;text-shadow: 1px 1px 5px black;";
+        blockCounter.innerText = '0/' + MAX_BLOCKS;
         toolbar.appendChild(blockCounter);
 
         document.getElementById('hud').appendChild(toolbar);
@@ -906,8 +917,8 @@ renderer.domElement.addEventListener('mousedown', e => {
         if (window.SWORD_FIGHT && !playerSpecialValues.slicing && canSlice) {
             playerSpecialValues.slicing = true;
             canSlice = false
-            primaryActionSound.currentTime = 0;
-            primaryActionSound.play();
+            slashSound.currentTime = 0;
+            slashSound.play();
             setTimeout(() => {
                 playerSpecialValues.slicing = false;
                 setTimeout(() => {
@@ -1713,7 +1724,6 @@ function updateCamera() {
     camera.lookAt(pivot);
 }
 
-gameSong.preload = "auto";
 let sword;
 let loadingSword = false;
 let died = false;
@@ -1817,7 +1827,7 @@ function loop(now) {
 
 const DEG2RAD = Math.PI / 180;
 
-async function loadMap(path, tx = 0, ty = 0, tz = 0) {
+async function loadMapVortex(path, tx = 0, ty = 0, tz = 0) {
     const parts = await fetch(path).then(r => r.json());
     const valid = parts.filter(p => p.Type === 'Part' && p.Shape === 'Block');
     if (!valid.length) return;
@@ -1859,7 +1869,7 @@ window._vortex = {
         CAM_V_SENS = 0.0015 * Math.PI * mult;
     },
     requestLock() { renderer.domElement.requestPointerLock(); },
-    loadMap,
+    loadMap: loadMapVortex,
     getCamera: () => camera,
     getCharBubbleBase: () => character ? character.position.y + CHAR_HEIGHT - CHAR_FOOT_OFFSET + 0.4 : 0,
     setSpawn(x, y, z, ry = Math.PI) {

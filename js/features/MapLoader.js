@@ -110,6 +110,26 @@ const maps = [
 
         BUILD_MODE: true,
     }, //added by Inuk, 10/5/2026
+
+    {
+        name: "PARTY.exe",
+        url: "window._importedAssets.PARTYexe",
+        picture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/icons/party-exe.png",
+        bannerpicture: "https://raw.githubusercontent.com/exelerantt/Vortex2plus2Addon/refs/heads/main/img/games/website/banners/party-exe.webp",
+        description: "Simple testing game made by exelerantt to test out his vortex 2+2 addon.",
+        creatorName: "exelerantt",
+        creatorId: 2162,
+    },
+
+    {
+        name: "Baseplate",
+        url: "",
+        picture: "https://tr.rbxcdn.com/180DAY-0023459e3957978e242c1d270dafbae2/352/352/Image/Png/noFilter",
+        bannerpicture: "https://tr.rbxcdn.com/180DAY-1d29750b06e247dc4ad9dbf2b4aaa10e/768/432/Image/Png/noFilter",
+        description: "Just your average baseplate.",
+        creatorName: "exelerantt",
+        creatorId: 2162,
+    }
 ];
 
 function defSpawnPoint() {
@@ -160,11 +180,15 @@ window.chooseSpawnPoint = chooseSpawnPoint;
 })();
 
 async function initialize() {
+    var url_string = document.URL;
+    var url = new URL(url_string);
+    var gamei = url.searchParams.get("V22GameId");
+    var play = url.searchParams.get("Play");
     if (document.location.pathname == '/home' || document.location.pathname == '/social' || document.location.pathname == '/search' || document.location.pathname == '/games/2') {
         // game buttons!
         let f = await fetch('/api/game-stats')
         let gameStats = await f.json()
-        function waitForGamesLoaded() {
+        async function waitForGamesLoaded() {
             if (document.getElementById('games-grid').children.length > 0) {
                 for (let i = 0; i < maps.length; i++) {
                     let map = maps[i]
@@ -183,7 +207,7 @@ async function initialize() {
                     let gctitle = document.createElement('div')
                     gctitle.className = 'game-card-title'
                     gcbody.appendChild(gctitle)
-                    gctitle.innerHTML = map.name
+                    gctitle.innerHTML = '[2+2] ' + map.name
                     let gcmeta = document.createElement('div')
                     gcmeta.className = 'game-card-meta'
                     gcbody.appendChild(gcmeta)
@@ -208,7 +232,7 @@ async function initialize() {
             }
         }
         waitForGamesLoaded();
-    } else if (document.location.pathname == '/games/1') {
+    } else if (document.location.pathname == '/games/1' && !play) {
         var url_string = document.URL;
         var url = new URL(url_string);
         var gamei = url.searchParams.get("V22GameId");
@@ -231,9 +255,9 @@ async function initialize() {
                 if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
                 return String(n);
             }
+            console.log('hi')
             const page = document.getElementById('page');
-            page.id = 'page_vplus'
-            page.innerHTML = `
+            let txt = `
                         <div class="game-banner">
                             <img src="${picture}" alt="${map.name}">
                         </div>
@@ -253,7 +277,7 @@ async function initialize() {
                                     </div>
                                 </div>
                             </div>
-                            <a class="btn-play" href="https://vortex.towerstats.com/games/1/play?V22GameId=${gamei}">Play</a>
+                            <a class="btn-play" href="https://vortex.towerstats.com/games/1?Play=1&V22GameId=${gamei}">Play</a>
                         </div>
 
                         <div class="game-description-box">
@@ -261,7 +285,13 @@ async function initialize() {
                             <div class="game-description-text">${map.description}</div>
                         </div>
                     </div>
-    `;
+            `;
+            page.innerHTML=txt;
+            Object.defineProperty(page, "innerHTML", {
+                value: txt,
+                writable: false,
+                configurable: false
+            });
         }
     } else {
 
@@ -271,14 +301,16 @@ async function initialize() {
         let tmap
         if (gamei) {
             tmap = maps[gamei]
-            let spawn = window.chooseSpawnPoint(tmap)
-            window._vortex.setSpawn(spawn.x, spawn.y, spawn.z, 0);
+            if (tmap.gameId != 1) {
+                let spawn = window.chooseSpawnPoint(tmap)
+                window._vortex.setSpawn(spawn.x, spawn.y, spawn.z, 0);
 
-            loadMapUrl(tmap.name, tmap.url)
+                loadMapUrl(tmap.name, tmap.url)
 
-            if (tmap.skyColor) {
-                scene.fog = new THREE.Fog(tmap.skyColor, 192, 480);
-                renderer.setClearColor(tmap.skyColor);
+                if (tmap.skyColor) {
+                    scene.fog = new THREE.Fog(tmap.skyColor, 192, 480);
+                    renderer.setClearColor(tmap.skyColor);
+                }
             }
         }
 
@@ -435,12 +467,13 @@ async function initialize() {
 }
 
 window.onload = () => {
+    console.log('initializing map loader');
     initialize()
 
     if (typeof connect != 'undefined') connect()
 
     let watermark = document.createElement('a')
-    watermark.innerHTML = 'Vortex2+2 v0.1.0 by @inuk'
+    watermark.innerHTML = 'Vortex2+2 v0.4.0 by @inuk'
     Object.assign(watermark.style, {
         position: 'fixed',
         bottom: '5px',

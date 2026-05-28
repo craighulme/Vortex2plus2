@@ -1,5 +1,7 @@
 //Made by Inuk
-const COLORS = ['#1a1a1a', '#2563EB', '#16A34A', '#9333EA', '#D97706', '#DC2626', '#0891B2'];
+if(typeof COLORS == 'undefined'){
+    const COLORS = ['#1a1a1a', '#2563EB', '#16A34A', '#9333EA', '#D97706', '#DC2626', '#0891B2'];
+}
 function avatarColor(u) {
     let h = 0;
     for (const c of u) h = (h * 31 + c.charCodeAt(0)) & 0xFFFF;
@@ -220,7 +222,7 @@ function _animateRemote(id, r, dt) {
             let dz = (z - rz * 0.5) - character.position.z;
             let distsq = (dx * dx + dy * dy + dz * dz);
             if (distsq < 7) {
-                playerSpecialValues.health -= dt * 0.5;
+                playerSpecialValues.health -= dt * 1;
             }
         }
     }
@@ -485,11 +487,9 @@ async function fetchFriendData() {
 
 let _reconnectAttempts = 0;
 const _MAX_RECONNECTS = 3;
-
 async function connect() {
-    const res = await fetch(`/api/ws-ticket?game_id=${window.GAME_ID || 0}&fingerprint=${encodeURIComponent(window._fingerprint || '')}?fp_token=`).then(r => r.ok ? r.json() : null);
+    const res = await fetch(`/api/ws-ticket?game_id=${window.GAME_ID || 0}&fingerprint=${encodeURIComponent(window._fingerprint || '')}`).then(r => r.ok ? r.json() : null);
     if (!res) { console.log('failed to connect'); setTimeout(connect, 4000); return; }
-
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${proto}://${location.host}/ws/play?t=${res.ticket}`);
 
@@ -662,8 +662,8 @@ function _setBlockState(userid, x, y, z, state) {
             blockCounter.style.color = 'rgb(255 255 255 / 90%)'
         }
         if(canPlaySounds){
-            primaryActionSound.currentTime = 0;
-            primaryActionSound.play();
+            clickSound.currentTime = 0;
+            clickSound.play();
         }
     }
 }

@@ -172,3 +172,29 @@ label {
     border-color: var(--linecol2) !important;
     background-color: var(--bgcol2);
 }
+
+/* download page */
+.dl-code {
+    background-color: var(--bgcol3) !important;
+    border-color: var(--linecol2) !important;
+}
+.dl-card {
+    background-color: var(--bgcol2) !important;
+}
+.dl-hero, .dl-card {
+    border-color: var(--linecol2) !important;
+}
+.dl-notice {
+    background-color: var(--bgcol2) !important;
+    border-color: var(--linecol1) !important;
+}
+li{
+    color: var(--textcol1) !important;
+}
+.dl-code {
+    color: var(--textcol2) !important;
+}
+.btn-download{
+    background-color: var(--accentcol1) !important;
+    border: 2px solid var(--linecol2) !important;
+}

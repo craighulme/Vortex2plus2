@@ -1,6 +1,6 @@
 {
   "name": "Vortex2+2",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "manifest_version": 3,
   "description": "An extension to make Vortex so much better.",
   "icons": {
@@ -30,11 +30,9 @@
         "styles/main.css"
       ],
       "js": [
-        "js/inject/InjectMapLoader.js",
-        "js/inject/InjectAssets.js",
-        "js/lightMode.js"
+        "js/inject/InjectMapLoader.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_idle"
     },
     {
       "matches": [
@@ -43,6 +41,11 @@
       "js": [
         "js/features/Search.js"
       ]
+    },
+    {
+      "matches": ["https://vortex.towerstats.com/games/*"],
+      "js": ["js/oldVersion.js","js/lightMode.js"],
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [

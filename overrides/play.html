@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><base href="/">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vortex 2+2</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <script src="test"></script>
+    <script src="/lib/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js"></script>
+    <script src="/lib/FBXLoader.js"></script>
+    <script src="/lib/cannon.min.js"></script>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+</head>
+<body>
+    <div id="scene"></div>
+    <div id="crosshair"></div>
+    <div id="cursor"></div>
+    <div id="overlay"><span>Click to play</span></div>
+
+    <div id="lb-player-panel" style="display:none">
+        <div class="lbp-name" id="lbp-name"></div>
+        <button class="lbp-btn" id="lbp-action-btn"></button>
+        <button class="lbp-btn" id="lbp-follow-btn"></button>
+        <a class="lbp-profile" id="lbp-profile-link" href="#" target="_blank">View Profile →</a>
+    </div>
+
+    <div id="settings-panel" style="display:none">
+        <div class="sp-title">Settings</div>
+        <div class="sp-row">
+            <span class="sp-label">Camera Sensitivity</span>
+            <input type="range" id="sp-sens" min="0.1" max="3" step="0.05" value="1">
+            <span class="sp-val" id="sp-sens-val">1.0x</span>
+        </div>
+    </div>
+
+    <div id="leaderboard">
+        <div class="lb-panel">
+            <div class="lb-header">
+                <span class="lb-title">Players</span>
+                <div class="lb-col-headers" id="lb-col-headers"></div>
+            </div>
+            <div class="lb-body" id="lb-body"></div>
+        </div>
+    </div>
+
+    <div id="hud">
+        <div id="hud-topbar">
+            <button class="hud-btn" id="settings-btn" title="Settings">
+                <i class="fa-solid fa-gear"></i>
+            </button>
+            <button class="hud-btn" id="chat-toggle-btn" title="Chat">
+                <i class="fa-solid fa-message"></i>
+                <span id="unread-badge" class="hidden">0</span>
+            </button>
+        </div>
+        <div id="chat-window">
+            <div id="chat-messages"></div>
+            <div id="chat-input-row">
+                <div id="chat-input" tabindex="-1"><span class="chat-placeholder">Click or press / to chat</span></div>
+                <button id="chat-send">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notif-container"></div>
+
+    <div id="purchase-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:200px;background:rgba(18,18,26,0.95);border-radius:8px;padding:14px;font-family:system-ui,sans-serif;color:#fff;">
+        <div id="pm-name" style="font-size:13px;font-weight:700;margin-bottom:2px;"></div>
+        <div id="pm-price" style="font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:12px;"></div>
+        <div style="display:flex;gap:6px;">
+            <button id="pm-cancel" style="flex:1;padding:7px 0;border:none;border-radius:6px;background:rgba(255,255,255,0.08);color:#fff;font-size:12px;cursor:pointer;">Cancel</button>
+            <button id="pm-get" style="flex:1;padding:7px 0;border:none;border-radius:6px;background:#2563EB;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">Get</button>
+        </div>
+    </div>
+
+    <script src="/js/avatar.js"></script>
+    <script src="/js/vortex-engine.js"></script>
+    <script>
+        document.getElementById('settings-btn').addEventListener('click', () => {
+            const p = document.getElementById('settings-panel');
+            p.style.display = p.style.display === 'none' ? '' : 'none';
+        });
+
+        const sensSlider = document.getElementById('sp-sens');
+        const sensVal    = document.getElementById('sp-sens-val');
+
+        const savedSens = parseFloat(localStorage.getItem('vortex_sens') || '1');
+        sensSlider.value = savedSens;
+        sensVal.textContent = savedSens.toFixed(2) + 'x';
+        window._vortex?.setSens(savedSens);
+
+        sensSlider.addEventListener('input', function () {
+            const v = parseFloat(this.value);
+            sensVal.textContent = v.toFixed(2) + 'x';
+            window._vortex?.setSens(v);
+            localStorage.setItem('vortex_sens', v);
+        });
+
+        const GREEN    = 0x4db84b;
+        const RED_C    = 0xc4281c;
+        const _PAD_BLUE = 0x0d69ac;
+
+        let _marketItems  = {};
+        let _ownedIds     = new Set();
+        let _currentItemId = undefined;
+
+        function _setPadColor(pad, hex) {
+            if (!pad.mesh) return;
+            for (const m of pad.mesh.material) m.color.setHex(hex);
+        }
+
+        function _padColor(pad) {
+            if (_currentItemId === pad.item_id) return _PAD_BLUE;
+            if (pad.item_id === null) return GREEN;
+            return _ownedIds.has(pad.item_id) ? GREEN : RED_C;
+        }
+
+        function _refreshPadColors() {
+            if (!window.SHIRT_PADS) return;
+            for (const pad of window.SHIRT_PADS) _setPadColor(pad, _padColor(pad));
+        }
+
+        async function _loadMarketplace() {
+            try {
+                const [itemsRes, invRes, shirtRes] = await Promise.all([
+                    fetch('/api/marketplace/items'),
+                    fetch('/api/inventory'),
+                    fetch('/api/clothing/shirt'),
+                ]);
+                if (itemsRes.ok) {
+                    const arr = await itemsRes.json();
+                    for (const it of arr) _marketItems[it.id] = it;
+                }
+                if (invRes.ok) {
+                    const inv = await invRes.json();
+                    for (const id of (inv.item_ids || [])) _ownedIds.add(id);
+                }
+                if (shirtRes.ok) {
+                    const s = await shirtRes.json();
+                    _currentItemId = s.shirt_id ?? null;
+                } else {
+                    _currentItemId = null;
+                }
+            } catch(e) { _currentItemId = null; }
+            _refreshPadColors();
+        }
+
+        async function _spawnDummies() {
+            while (!window._vortex.getCharacter() || !window._mpCreateDummy || !window.SHIRT_PADS) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+            const dummyY = 2.6 + window._vortex.getCharFootOffset();
+            for (const pad of window.SHIRT_PADS) {
+                const shirtUrl = pad.item_id !== null ? (_marketItems[pad.item_id]?.image_path ?? null) : null;
+                window._mpCreateDummy(pad.x, dummyY, pad.z + 1, shirtUrl, Math.PI);
+            }
+            _refreshPadColors();
+        }
+
+        async function _initMarketplace() {
+            await _loadMarketplace();
+            _spawnDummies();
+        }
+
+        _initMarketplace();
+
+        let _activeShirtPad = null;
+        let _promptOpen     = false;
+        let _promptPad      = null;
+
+        const _modal    = document.getElementById('purchase-modal');
+        const _pmName   = document.getElementById('pm-name');
+        const _pmPrice  = document.getElementById('pm-price');
+        const _pmCancel = document.getElementById('pm-cancel');
+        const _pmGet    = document.getElementById('pm-get');
+
+        function _equipShirt(pad) {
+            if (_currentItemId === pad.item_id) return;
+            _currentItemId = pad.item_id;
+            if (pad.item_id === null) {
+                window._vortex.applyShirt(null);
+            } else {
+                const item = _marketItems[pad.item_id];
+                if (!item) return;
+                window._vortex.applyShirt(item.image_path);
+            }
+            _refreshPadColors();
+            fetch('/api/clothing/shirt', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shirt_id: pad.item_id }),
+            }).catch(() => {});
+        }
+
+        function _showPrompt(pad) {
+            const item = _marketItems[pad.item_id];
+            if (!item) return;
+            _promptPad  = pad;
+            _promptOpen = true;
+            _pmName.textContent  = item.name;
+            _pmPrice.textContent = item.price === 0 ? 'FREE' : item.price + ' coins';
+            _modal.style.display = 'block';
+        }
+
+        function _closePrompt() {
+            _promptOpen          = false;
+            _promptPad           = null;
+            _modal.style.display = 'none';
+        }
+
+        const _purchaseResolvers = new Map();
+        window._onPurchaseToken = (item_id, token) => {
+            const resolve = _purchaseResolvers.get(item_id);
+            if (resolve) { _purchaseResolvers.delete(item_id); resolve(token); }
+        };
+
+        async function _doPurchase() {
+            const pad = _promptPad;
+            if (!pad) return;
+            _closePrompt();
+            try {
+                const token = await new Promise((resolve, reject) => {
+                    _purchaseResolvers.set(pad.item_id, resolve);
+                    window._mpSendWs({ type: 'request_purchase_token', item_id: pad.item_id });
+                    setTimeout(() => { _purchaseResolvers.delete(pad.item_id); reject(); }, 5000);
+                });
+                const res = await fetch('/api/marketplace/purchase', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_id: pad.item_id, token }),
+                });
+                if (res.ok) {
+                    _ownedIds.add(pad.item_id);
+                    _equipShirt(pad);
+                }
+            } catch(e) {}
+        }
+
+        window._onEngineClick = () => {
+            if (!_promptOpen) return false;
+            const co = window._vortex.cursorOver;
+            if (co(_pmGet))    { _doPurchase(); return true; }
+            if (co(_pmCancel)) { _closePrompt(); return true; }
+            return true;
+        };
+
+        async function _handlePadStep(pad) {
+            if (pad.item_id === null || _ownedIds.has(pad.item_id)) {
+                _equipShirt(pad);
+                return;
+            }
+            _showPrompt(pad);
+        }
+
+        setInterval(() => {
+            const ch = window._vortex?.getCharacter?.();
+            if (!ch || !window.SHIRT_PADS || _promptOpen || _currentItemId === undefined) return;
+            const p = ch.position;
+            let hit = null;
+            for (const pad of window.SHIRT_PADS) {
+                const dx = p.x - pad.x, dz = p.z - pad.z;
+                if (dx*dx + dz*dz < 6.25) { hit = pad; break; }
+            }
+            if (hit !== _activeShirtPad) {
+                _activeShirtPad = hit;
+                if (hit) _handlePadStep(hit);
+            }
+        }, 100);
+    </script>
+    <script src="/js/parts.js"></script>
+    <script src="/js/leaderboard.js"></script>
+    <script>window.GAME_ID = 1;</script>
+    <script src="/js/multiplayer.js"></script>
+    <script src="/js/chat.js"></script>
+    <script src="/js/notifications.js"></script>
+</body>
+</html>

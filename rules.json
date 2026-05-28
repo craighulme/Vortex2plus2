@@ -46,5 +46,199 @@
         "script"
       ]
     }
+  },
+  {
+    "id": 4,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/three.min.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "three.min.js",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 5,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/FBXLoader.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "FBXLoader.js",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 6,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/notifications.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "notifications.js",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 7,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/leaderboard.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "leaderboard.js",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 8,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/chat.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "chat.js",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 9,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/mdl/player.fbx"
+      }
+    },
+    "condition": {
+      "urlFilter": "player.fbx",
+      "resourceTypes": [
+        "xmlhttprequest",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 10,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/inflate.min.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "inflate.min.js",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 11,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/profanity-cleaner.min.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "profanity-cleaner.min.js",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 12,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/styles-ingame.css"
+      }
+    },
+    "condition": {
+      "urlFilter": "games/styles.css",
+      "resourceTypes": [
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 13,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/avatar.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "avatar.js",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 14,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/cannon.min.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "cannon.min.js",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 15,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/mdl/Head1_diff.png"
+      }
+    },
+    "condition": {
+      "urlFilter": "Head1_diff.png",
+      "resourceTypes": [
+        "image"
+      ]
+    }
   }
 ]
