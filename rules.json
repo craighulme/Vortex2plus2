@@ -11,7 +11,8 @@
     "condition": {
       "urlFilter": "parts.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -27,7 +28,8 @@
     "condition": {
       "urlFilter": "vortex-engine.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -43,7 +45,8 @@
     "condition": {
       "urlFilter": "multiplayer.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -59,7 +62,8 @@
     "condition": {
       "urlFilter": "three.min.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -75,7 +79,8 @@
     "condition": {
       "urlFilter": "FBXLoader.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -91,7 +96,8 @@
     "condition": {
       "urlFilter": "notifications.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -107,7 +113,8 @@
     "condition": {
       "urlFilter": "leaderboard.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -123,7 +130,8 @@
     "condition": {
       "urlFilter": "chat.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -133,7 +141,7 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/mdl/player.fbx"
+        "extensionPath": "/files/meshes/player.fbx"
       }
     },
     "condition": {
@@ -157,7 +165,8 @@
     "condition": {
       "urlFilter": "inflate.min.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -173,7 +182,8 @@
     "condition": {
       "urlFilter": "profanity-cleaner.min.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -205,7 +215,8 @@
     "condition": {
       "urlFilter": "avatar.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -221,7 +232,8 @@
     "condition": {
       "urlFilter": "cannon.min.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "xmlhttprequest"
       ]
     }
   },
@@ -231,7 +243,7 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/mdl/Head1_diff.png"
+        "extensionPath": "/files/meshes/Head1_diff.png"
       }
     },
     "condition": {

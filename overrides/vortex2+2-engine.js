@@ -633,15 +633,6 @@ renderer.domElement.addEventListener('click', () => {
     }
     renderer.domElement.requestPointerLock();
 });
-let canPlaySounds = false;
-overlay.addEventListener('click', () => {
-    if (leaveButton.matches(':hover')) { return }
-    canPlaySounds = true;
-    if (window.SWORD_FIGHT||window.BUILD_MODE) {
-        gameSong.play();
-    }
-    renderer.domElement.requestPointerLock();
-});
 
 const settingsPanel = document.getElementById('settings-panel');
 settingsPanel.style.cursor = 'auto'
@@ -696,18 +687,12 @@ function makeSettingsSlider(text, min, max, def, step, onchange) {
 
 const oofSound = new Audio(importedAssets.oofSound)
 
-const primaryActionSound = new Audio(window.SWORD_FIGHT?importedAssets.swordSlash:(importedAssets.placeBlock));
-primaryActionSound.preload = "auto";
-primaryActionSound.volume = 0.8;
-
-makeSettingsSlider('Music volume', 0, 1, 0.9, 0.1, function (slider, val) {
-    gameSong.volume = val;
-})
-makeSettingsSlider('Sfx volume', 0, 1, 1, 0.1, function (slider, val) {
-    slashSound.volume = val * 0.8;
-    clickSound.volume = val * 0.8;
-    oofSound.volume = val;
-})
+const slashSound = new Audio(importedAssets.swordSlash);
+slashSound.preload = "auto";
+slashSound.volume = 0.8;
+const clickSound = new Audio(importedAssets.placeBlock);
+clickSound.preload = "auto";
+clickSound.volume = 0.8;
 
 settingsPanel.appendChild(toggleShadows);
 
@@ -1706,7 +1691,7 @@ function updateCamera() {
     );
     camera.lookAt(pivot);
 }
-
+let canPlaySounds = false;
 let sword;
 let loadingSword = false;
 let died = false;
@@ -1838,28 +1823,38 @@ async function loadMapVortex(path, tx = 0, ty = 0, tz = 0) {
 }
 
 console.log(window.SWORD_FIGHT)
-let gameSong = new Audio(window.SWORD_FIGHT && importedAssets.sfothSong ||     importedAssets.buildSong);
-gameSong.loop = true;
-gameSong.preload = "auto";
-gameSong.volume = 0.9;
-gameSong.addEventListener('ended', function () {
-    this.currentTime = 0;
-    this.play();
-}, false);
-gameSong.preload = "auto";
+let gameSong;
+let gameSongVolume = 1.;
+makeSettingsSlider('Music volume', 0, 1, 0.9, 0.1, function (slider, val) {
+    if (gameSong) {
+        gameSong.volume = val;
+    }
+})
+makeSettingsSlider('Sfx volume', 0, 1, 1, 0.1, function (slider, val) {
+    slashSound.volume = val * 0.8;
+    clickSound.volume = val * 0.8;
+    oofSound.volume = val;
+})
 
 overlay.addEventListener('click', () => {
     if (leaveButton.matches(':hover')) { return }
     canPlaySounds = true;
-    if (window.SWORD_FIGHT||window.BUILD_MODE) {
-        gameSong.play();
+    if (window.SWORD_FIGHT || window.BUILD_MODE) {
+        if (!gameSong) {
+            gameSong = new Audio(window.SWORD_FIGHT && importedAssets.sfothSong || importedAssets.buildSong);
+            gameSong.loop = true;
+            gameSong.preload = "auto";
+            gameSong.volume = gameSongVolume;
+            gameSong.addEventListener('ended', function () {
+                this.currentTime = 0;
+                this.play();
+            }, false);
+            gameSong.preload = "auto";
+            gameSong.play();
+        }
     }
     renderer.domElement.requestPointerLock();
 });
-
-makeSettingsSlider('Music volume', 0, 1, 0.9, 0.1, function (slider, val) {
-    gameSong.volume = val;
-})
 
 window._vortex = {
     scene,

@@ -7,20 +7,15 @@ let mapsLoaded = []
 
 async function loadMapUrl(name, url, REMOVE_BASEPLATE) {
     console.log("Loading map:", name, url);
-    let f = await fetch('https://cors.io/?url=' + url)
-    let r = await f.json()
-    let mapData = JSON.parse(r.body)
+    let f = await fetch(url)
+    let mapData = await f.json()
     let deg2rad = 0.0174532925;
     mapsLoaded[name] = []
     for (let i = 0; i < mapData.length; i++) {
         let v = mapData[i]
-        let mesh, _ = addStud(v.S[0], v.S[1], v.S[2], Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], v.R[0] * deg2rad, v.R[1] * deg2rad, v.R[2] * deg2rad)
-        mapsLoaded[name][i] = mesh
+        let [mesh, stud_id] = addStud(v.S[0], v.S[1], v.S[2], Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], v.R[0] * deg2rad, v.R[1] * deg2rad, v.R[2] * deg2rad)
+        mapsLoaded[name][i] = [mesh, stud_id]
     }
-
-    // gonna admit some of this is vibe coded
-    // as in the way i got this, i did not copy and paste !!!
-
     try {
         scene.traverse(obj => {
             if (obj.isMesh || obj.type === 'Mesh' || obj.isGridHelper) {
@@ -56,12 +51,7 @@ async function loadMapUrl(name, url, REMOVE_BASEPLATE) {
                 }
             }
         });
-    } catch (err) {
-        // no i dont wanna hear you anymore
-    }
-
-    gameSong = new Audio(window.SWORD_FIGHT && importedAssets.sfothSong || importedAssets.buildSong);
-    primaryActionSound = new Audio(window.SWORD_FIGHT && importedAssets.swordSlash || importedAssets.placeBlock);
+    } catch (err) { }
 }
 
 async function loadMapData(name, asset, REMOVE_BASEPLATE) {
@@ -74,15 +64,12 @@ async function loadMapData(name, asset, REMOVE_BASEPLATE) {
     mapsLoaded[name] = []
     for (let i = 0; i < mapData.length; i++) {
         let v = mapData[i]
-        let mesh, _ = addStud(v.S[0], v.S[1], v.S[2], Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], v.R[0] * deg2rad, v.R[1] * deg2rad, v.R[2] * deg2rad)
-        mapsLoaded[name][i] = mesh
+        let [mesh, stud_id] = addStud(v.S[0], v.S[1], v.S[2], Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], v.R[0] * deg2rad, v.R[1] * deg2rad, v.R[2] * deg2rad)
+        mapsLoaded[name][i] = [mesh, stud_id]
     }
 
     if (REMOVE_BASEPLATE) {
-        // gonna admit some of this is made by ai
-        // as in the way i got this, i did not copy and paste !!!
-
-        try { 
+        try {
             scene.traverse(obj => {
                 if (obj.isMesh || obj.type === 'Mesh' || obj.isGridHelper) {
                     let width = 0;
@@ -109,7 +96,7 @@ async function loadMapData(name, asset, REMOVE_BASEPLATE) {
                         if (obj.name !== "Player" && !obj.isBone && obj.type !== 'Bone') {
                             scene.remove(obj);
                             obj.visible = false;
-                            
+
                             if (obj.geometry) obj.geometry.dispose();
                             if (obj.material) {
                                 if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
@@ -119,13 +106,8 @@ async function loadMapData(name, asset, REMOVE_BASEPLATE) {
                     }
                 }
             });
-        } catch(err) {
-            // no i dont wanna hear you anymore
-        }
+        } catch (err) { }
     }
-
-    gameSong = new Audio(window.SWORD_FIGHT && importedAssets.sfothSong ||     importedAssets.buildSong);
-    primaryActionSound = new Audio(window.SWORD_FIGHT && importedAssets.swordSlash || importedAssets.placeBlock);
 }
 
 function loadMapRaw(name, r) {
@@ -140,16 +122,17 @@ function loadMapRaw(name, r) {
         let rx = v.R[0]
         let ry = v.R[1]
         let rz = v.R[2]
-        let mesh, _ = addStud(sx, sy, sz, Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], rx * deg2rad, ry * deg2rad, rz * deg2rad)
-        mapsLoaded[name][i] = mesh
+        let [mesh, stud_id] = addStud(sx, sy, sz, Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], rx * deg2rad, ry * deg2rad, rz * deg2rad)
+        mapsLoaded[name][i] = [mesh,stud_id]
     }
 }
 
 function unloadMap(name) {
     if (mapsLoaded[name]) {
+        console.log('unloading')
         for (let i = 0; i < mapsLoaded[name].length; i++) {
-            let mesh = mapsLoaded[name][i]
-            scene.remove(mesh)
+            let [mesh,stud_id] = mapsLoaded[name][i]
+            removeStud(stud_id);
         }
     }
 }
@@ -293,11 +276,33 @@ window.chooseSpawnPoint = chooseSpawnPoint;
     console.log('set window map data')
 })();
 
+async function importMapAssets() {
+    let mapsLen = maps.length;
+    for (let i = 0; i < mapsLen; i++) {
+        let map = maps[i]
+        if (map.url) {
+            while (!window.importedAssets) {
+                let el = document.getElementById("_importedAssets"); if (el) {
+                    window.importedAssets = JSON.parse(el.content);
+                }
+                else {
+                    await new Promise(r => setTimeout(r, 50));
+                }
+            }
+            if (map.url.startsWith("window.")) {
+                console.log(importedAssets.mapdata[map.url.split(".")[2]])
+                maps[i].url = importedAssets.mapdata[map.url.split(".")[2]]
+            }
+        }
+    };
+}
+
 async function initialize() {
     var url_string = document.URL;
     var url = new URL(url_string);
     var gamei = url.searchParams.get("V22GameId");
     var play = url.searchParams.get("Play");
+    await importMapAssets();
     if (document.location.pathname == '/home' || document.location.pathname == '/social' || document.location.pathname == '/search' || document.location.pathname == '/games/2') {
         // game buttons!
         let f = await fetch('/api/game-stats')
@@ -367,7 +372,7 @@ async function initialize() {
             let creatorName = map.creatorName
             let creatorId = map.creatorId
             let picture = map.bannerpicture
-            
+
             while (!window.importedAssets) { let el = document.getElementById("_importedAssets"); if (el) window.importedAssets = JSON.parse(el.content); else await new Promise(r => setTimeout(r, 50)); }
 
             if (picture.startsWith("window.")) {
@@ -414,7 +419,7 @@ async function initialize() {
                         </div>
                     </div>
             `;
-            page.innerHTML=txt;
+            page.innerHTML = txt;
             Object.defineProperty(page, "innerHTML", {
                 value: txt,
                 writable: false,
