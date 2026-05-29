@@ -44,6 +44,8 @@ renderer.setClearColor(0x87CEEB);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = enableShadows === 'yes';
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.antialias = false;
+renderer.powerPreference = "high-performance";
 document.getElementById("scene").appendChild(renderer.domElement);
 
 window.addEventListener('resize', () => {
@@ -98,7 +100,7 @@ function getCachedGeo(sw, sh, sd) {
 function getCachedMats(sw, sh, sd, color) {
     const key = `${sw},${sh},${sd},${color}`;
     if (matCache.has(key)) return matCache.get(key);
-    const m = (rx, ry) => new THREE.MeshStandardMaterial({ color: color, map: studTex(rx, ry), normalMap: studNormalTex(rx, ry) });
+    const m = (rx, ry) => new THREE.MeshPhongMaterial({ color: color, map: studTex(rx, ry), normalMap: studNormalTex(rx, ry), shininess: 80 });
     const mats = [
         m(sd / STUDS_PER_TILE, sh / STUDS_PER_TILE),
         m(sd / STUDS_PER_TILE, sh / STUDS_PER_TILE),
@@ -141,6 +143,9 @@ function addStud(sw, sh, sd, color, x, y, z, rx = 0, ry = 0, rz = 0) {
     if (rx !== 0 || ry !== 0 || rz !== 0) mesh.rotation.set(rx, ry, rz);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
+    mesh.matrixAutoUpdate = false;
+    mesh.frustumCulled = true;
+    mesh.updateMatrix();
     scene.add(mesh);
     let b;
     if (rx === 0 && ry === 0 && rz === 0) {
@@ -644,7 +649,7 @@ toggleShadowsleftText.className = 'sp-label';
 toggleShadowsleftText.innerText = 'Toggle shadows'
 let toggleShadowsCheckBox = document.createElement('input');
 toggleShadowsCheckBox.type = "checkbox";
-if (enableShadows) {
+if (enableShadows==='yes') {
     toggleShadowsCheckBox.click();
 }
 toggleShadowsCheckBox.onchange = function () {
