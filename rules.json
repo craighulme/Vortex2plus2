@@ -188,22 +188,6 @@
     }
   },
   {
-    "id": 12,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/overrides/styles-ingame.css"
-      }
-    },
-    "condition": {
-      "urlFilter": "games/styles.css",
-      "resourceTypes": [
-        "other"
-      ]
-    }
-  },
-  {
     "id": 13,
     "priority": 2,
     "action": {
@@ -250,6 +234,22 @@
       "urlFilter": "Head1_diff.png",
       "resourceTypes": [
         "image"
+      ]
+    }
+  },
+  {
+    "id": 16,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/styles.css"
+      }
+    },
+    "condition": {
+      "urlFilter": "styles.css",
+      "resourceTypes": [
+        "stylesheet"
       ]
     }
   }

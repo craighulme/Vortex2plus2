@@ -7,6 +7,7 @@ let mapsLoaded = []
 
 async function loadMapUrl(name, url, REMOVE_BASEPLATE) {
     console.log("Loading map:", name, url);
+    if(!url) return
     let f = await fetch(url)
     let mapData = await f.json()
     let deg2rad = 0.0174532925;
@@ -151,6 +152,8 @@ const maps = [
         spawnPoints: [[330, 100, 27]],
 
         SWORD_FIGHT: true,
+
+        REMOVE_BASEPLATE: true,
     }, //added by Inuk, 6/5/2026, added a ramp to enter the map more easily
 
     {
@@ -169,6 +172,8 @@ const maps = [
 
         SWORD_FIGHT: true,
         VOID_DIE: true,
+
+        REMOVE_BASEPLATE: true,
     }, //added by Inuk, 9/5/2026
 
     {
@@ -186,6 +191,8 @@ const maps = [
         skyColor: 0xA00000,
 
         SWORD_FIGHT: true,
+
+        REMOVE_BASEPLATE: true,
     }, //added by Inuk, 10/5/2026
 
     {
@@ -203,6 +210,8 @@ const maps = [
         //skyColor: 0xA00000,
 
         BUILD_MODE: true,
+
+        REMOVE_BASEPLATE: true,
     }, //added by Inuk, 10/5/2026
 
     {
@@ -213,16 +222,20 @@ const maps = [
         description: "Simple testing game made by exelerantt to test out his vortex 2+2 addon.",
         creatorName: "exelerantt",
         creatorId: 2162,
+
+        REMOVE_BASEPLATE: true,
     },
 
     {
         name: "Baseplate",
-        url: "",
+        url: "window._importedAssets.Baseplate",
         picture: "window._importedAssets.baseplate",
         bannerpicture: "window._importedAssets.baseplate",
         description: "Just your average baseplate.",
         creatorName: "exelerantt",
         creatorId: 2162,
+
+        REMOVE_BASEPLATE: true,
     }
 ];
 
@@ -233,7 +246,7 @@ function defSpawnPoint() {
     return { x: cx, y: cy, z: cz }
 }
 function chooseSpawnPoint(m) {
-    if (!m) return defSpawnPoint()
+    if (!m || !m.spawnPoints) return defSpawnPoint()
     let entry = m.spawnPoints[Math.round(Math.random() * (m.spawnPoints.length - 1))]
     let cx = entry[0]
     let cy = entry[1]
@@ -518,7 +531,7 @@ async function initialize() {
                     btn.innerHTML = map.name + '(Not loaded)'
                     loaded = false
                 } else {
-                    if (map.url.startsWith("window.")) {
+                    if (map.url && map.url.startsWith("window.")) {
                         loadMapData(map.name, map.url.split(".")[2], map.REMOVE_BASEPLATE)
                     } else {
                         loadMapUrl(map.name, map.url, map.REMOVE_BASEPLATE)

@@ -773,7 +773,7 @@ body {
 .notif-decline:hover { background: rgba(255,255,255,0.18); }
 .notif-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-#vortex-loading-screen {
+#loadingScreen {
     position: fixed;
     inset: 0;
     background: #12121a;
@@ -786,13 +786,13 @@ body {
     transition: opacity 0.4s ease, visibility 0.4s ease;
 }
 
-#vortex-loading-screen.hidden {
+#loadingScreen.hidden {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
 }
 
-#vortex-loading-logo {
+#loadingLogo {
     color: #fff;
     font-size: 24px;
     font-weight: 700;
@@ -800,7 +800,7 @@ body {
     margin-bottom: 16px;
 }
 
-#vortex-loading-bar-bg {
+#loadingBarBg {
     width: 200px;
     height: 2px;
     background: rgba(255,255,255,0.1);
@@ -808,7 +808,7 @@ body {
     overflow: hidden;
 }
 
-#vortex-loading-bar-fill {
+#loadingBarFill {
     position: absolute;
     top: 0;
     left: 0;

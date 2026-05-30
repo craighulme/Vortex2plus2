@@ -36,6 +36,7 @@ const importedAssets = {
         Crossroads: chrome.runtime.getURL("files/mapdata/Crossroads.json"),
         SFBaseplate: chrome.runtime.getURL("files/mapdata/SFBaseplate.json"),
         SFOTH: chrome.runtime.getURL("files/mapdata/SFOTH.json"),
+        Baseplate: chrome.runtime.getURL("files/mapdata/Baseplate.json"),
     }
 };
 

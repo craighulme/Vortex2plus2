@@ -26,6 +26,10 @@ THREE.DefaultLoadingManager.onStart = function (url, loaded, total) {
 THREE.DefaultLoadingManager.onProgress = function (url, loaded, total) {
     if (_worldBuilt) return;
     _loadingBarFill.style.width = (loaded / total) * 100 + "%";
+    if(loaded>=total){
+        _worldBuilt=true;
+        _loadingScreen.classList.add("hidden");
+    }
 };
 THREE.DefaultLoadingManager.onLoad = function () { };
 
