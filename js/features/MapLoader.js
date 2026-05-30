@@ -5,58 +5,31 @@
 
 let mapsLoaded = []
 
-async function loadMapUrl(name, url, REMOVE_BASEPLATE) {
+async function loadMapUrl(name, url, yoff) {
     console.log("Loading map:", name, url);
-    if(!url) return
+    if(!yoff) yoff=0
+    if (!url) return
     let f = await fetch(url)
     let mapData = await f.json()
     let deg2rad = 0.0174532925;
     mapsLoaded[name] = []
     for (let i = 0; i < mapData.length; i++) {
         let v = mapData[i]
-        let [mesh, stud_id] = addStud(v.S[0], v.S[1], v.S[2], Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], v.R[0] * deg2rad, v.R[1] * deg2rad, v.R[2] * deg2rad)
+        //{"Rotation":[0.0,0.0,0.0],"Type":"Part","Position":[94,0.5,20],"Color":"4a7c59","Transparency":0,"Shape":"Block","Size":[340,2,240]}
+        let s = v.Size ? v.Size : v.S;
+        let p = v.P ? v.P : v.Position;
+        let r = v.R ? v.R : v.Rotation;
+        let c = v.C ? v.C : v.Color;
+        let transp = v.Tr ? v.Tr : v.Transparency;
+        let sh = v.Sh ? v.Sh : v.Shape;
+        let [mesh, stud_id] = addStud(s[0], s[1], s[2], Number('0x' + c), p[0], p[1] - s[1] * 0.5 + yoff, p[2], r[0] * deg2rad, r[1] * deg2rad, r[2] * deg2rad, sh, transp)
         mapsLoaded[name][i] = [mesh, stud_id]
     }
-    try {
-        scene.traverse(obj => {
-            if (obj.isMesh || obj.type === 'Mesh' || obj.isGridHelper) {
-                let width = 0;
-                let length = 0;
-
-                if (obj.geometry) {
-                    if (!obj.geometry.boundingBox) {
-                        obj.geometry.computeBoundingBox();
-                    }
-                    const box = obj.geometry.boundingBox;
-                    if (box) {
-                        width = (box.max.x - box.min.x) * obj.scale.x;
-                        length = (box.max.z - box.min.z) * obj.scale.z;
-                    }
-                }
-
-                if (width === 0 || length === 0) {
-                    width = obj.scale.x;
-                    length = obj.scale.z;
-                }
-
-                if (width >= 100 && length >= 100) {
-                    if (obj.name !== "Player" && !obj.isBone && obj.type !== 'Bone') {
-                        obj.visible = !REMOVE_BASEPLATE;
-
-                        if (obj.geometry) obj.geometry.dispose();
-                        if (obj.material) {
-                            if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-                            else obj.material.dispose();
-                        }
-                    }
-                }
-            }
-        });
-    } catch (err) { }
 }
 
-async function loadMapData(name, asset, REMOVE_BASEPLATE) {
+async function loadMapData(name, asset, yoff) {
     console.log("Loading map:", name, asset);
+    if(!yoff) yoff=0
     let f = await fetch(importedAssets.mapdata[asset])
     let r = await f.text()
 
@@ -65,49 +38,14 @@ async function loadMapData(name, asset, REMOVE_BASEPLATE) {
     mapsLoaded[name] = []
     for (let i = 0; i < mapData.length; i++) {
         let v = mapData[i]
-        let [mesh, stud_id] = addStud(v.S[0], v.S[1], v.S[2], Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], v.R[0] * deg2rad, v.R[1] * deg2rad, v.R[2] * deg2rad)
+        let s = v.Size ? v.Size : v.S;
+        let p = v.P ? v.P : v.Position;
+        let r = v.R ? v.R : v.Rotation;
+        let c = v.C ? v.C : v.Color;
+        let transp = v.Tr ? v.Tr : v.Transparency;
+        let sh = v.Sh ? v.Sh : v.Shape;
+        let [mesh, stud_id] = addStud(s[0], s[1], s[2], Number('0x' + c), p[0], p[1] - s[1] * 0.5 + yoff, p[2], r[0] * deg2rad, r[1] * deg2rad, r[2] * deg2rad, sh, transp)
         mapsLoaded[name][i] = [mesh, stud_id]
-    }
-
-    if (REMOVE_BASEPLATE) {
-        try {
-            scene.traverse(obj => {
-                if (obj.isMesh || obj.type === 'Mesh' || obj.isGridHelper) {
-                    let width = 0;
-                    let length = 0;
-
-                    if (obj.geometry) {
-                        if (!obj.geometry.boundingBox) {
-                            obj.geometry.computeBoundingBox();
-                        }
-                        const box = obj.geometry.boundingBox;
-                        if (box) {
-                            width = (box.max.x - box.min.x) * obj.scale.x;
-                            length = (box.max.z - box.min.z) * obj.scale.z;
-                        }
-                    }
-
-                    if (width === 0 || length === 0) {
-                        width = obj.scale.x;
-                        length = obj.scale.z;
-                    }
-
-                    // Target the large floor baseplate
-                    if (width >= 100 && length >= 100) {
-                        if (obj.name !== "Player" && !obj.isBone && obj.type !== 'Bone') {
-                            scene.remove(obj);
-                            obj.visible = false;
-
-                            if (obj.geometry) obj.geometry.dispose();
-                            if (obj.material) {
-                                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-                                else obj.material.dispose();
-                            }
-                        }
-                    }
-                }
-            });
-        } catch (err) { }
     }
 }
 
@@ -117,14 +55,14 @@ function loadMapRaw(name, r) {
     mapsLoaded[name] = []
     for (let i = 0; i < mapData.length; i++) {
         let v = mapData[i]
-        let sx = v.S[0]
-        let sy = v.S[1]
-        let sz = v.S[2]
-        let rx = v.R[0]
-        let ry = v.R[1]
-        let rz = v.R[2]
-        let [mesh, stud_id] = addStud(sx, sy, sz, Number('0x' + v.C), v.P[0], v.P[1] - v.S[1] * 0.5, v.P[2], rx * deg2rad, ry * deg2rad, rz * deg2rad)
-        mapsLoaded[name][i] = [mesh,stud_id]
+        let s = v.Size ? v.Size : v.S;
+        let p = v.P ? v.P : v.Position;
+        let r = v.R ? v.R : v.Rotation;
+        let c = v.C ? v.C : v.Color;
+        let transp = v.Tr ? v.Tr : v.Transparency;
+        let sh = v.Sh ? v.Sh : v.Shape;
+        let [mesh, stud_id] = addStud(s[0], s[1], s[2], Number('0x' + c), p[0], p[1] - s[1] * 0.5, p[2], r[0] * deg2rad, r[1] * deg2rad, r[2] * deg2rad, sh, transp)
+        mapsLoaded[name][i] = [mesh, stud_id]
     }
 }
 
@@ -132,7 +70,7 @@ function unloadMap(name) {
     if (mapsLoaded[name]) {
         console.log('unloading')
         for (let i = 0; i < mapsLoaded[name].length; i++) {
-            let [mesh,stud_id] = mapsLoaded[name][i]
+            let [mesh, stud_id] = mapsLoaded[name][i]
             removeStud(stud_id);
         }
     }
@@ -215,6 +153,22 @@ const maps = [
     }, //added by Inuk, 10/5/2026
 
     {
+        name: "Glass Houses",
+        url: "window._importedAssets.Glasshouses",
+        picture: "window._importedAssets.Glasshouses",
+        bannerpicture: "window._importedAssets.Glasshouses",
+        description: "Battle it out with friends in this classic destructible environment! (not actually destructible)",
+        creatorName: "Streety",
+        creatorId: 6837,
+        gameId: -7,
+
+        yoff: 4,
+
+        SWORD_FIGHT: true,
+        REMOVE_BASEPLATE: true,
+    },
+
+    {
         name: "PARTY.exe",
         url: "window._importedAssets.PARTYexe",
         picture: "window._importedAssets.partyexe",
@@ -222,6 +176,7 @@ const maps = [
         description: "Simple testing game made by exelerantt to test out his vortex 2+2 addon.",
         creatorName: "exelerantt",
         creatorId: 2162,
+        gameId: -5,
 
         REMOVE_BASEPLATE: true,
     },
@@ -234,9 +189,10 @@ const maps = [
         description: "Just your average baseplate.",
         creatorName: "exelerantt",
         creatorId: 2162,
+        gameId: -6,
 
         REMOVE_BASEPLATE: true,
-    }
+    },
 ];
 
 function defSpawnPoint() {
@@ -451,11 +407,23 @@ async function initialize() {
                 let spawn = window.chooseSpawnPoint(tmap)
                 window._vortex.setSpawn(spawn.x, spawn.y, spawn.z, 0);
 
-                loadMapUrl(tmap.name, tmap.url)
+                loadMapUrl(tmap.name, tmap.url, tmap.yoff)
+
+                if (!tmap.REMOVE_BASEPLATE) {
+                    const ground = new THREE.Mesh(
+                        getCachedGeo(320, 3.2, 320),
+                        getCachedMats(320, 3.2, 320, 0x4db84b)
+                    );
+                    ground.receiveShadow = true;
+                    scene.add(ground);
+                }
 
                 if (tmap.skyColor) {
                     scene.fog = new THREE.Fog(tmap.skyColor, 192, 480);
                     renderer.setClearColor(tmap.skyColor);
+                    backLight.color=new THREE.Color(tmap.skyColor);
+                    scene.fog.color=new THREE.Color(tmap.skyColor);
+                    ambient.color=new THREE.Color(tmap.skyColor);
                 }
             }
         }
@@ -532,9 +500,9 @@ async function initialize() {
                     loaded = false
                 } else {
                     if (map.url && map.url.startsWith("window.")) {
-                        loadMapData(map.name, map.url.split(".")[2], map.REMOVE_BASEPLATE)
+                        loadMapData(map.name, map.url.split(".")[2],map.yoff)
                     } else {
-                        loadMapUrl(map.name, map.url, map.REMOVE_BASEPLATE)
+                        loadMapUrl(map.name, map.url,map.yoff)
                     }
                     let spawn = window.chooseSpawnPoint(map)
                     window._vortex.setSpawn(spawn.x, spawn.y, spawn.z, 0);

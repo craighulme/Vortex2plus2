@@ -18,7 +18,8 @@ const importedAssets = {
             partyexe: chrome.runtime.getURL("img/games/website/banners/party-exe.webp"),
             sfoth: chrome.runtime.getURL("img/games/website/banners/sfoth.webp"),
             swordfightingbaseplate: chrome.runtime.getURL("img/games/website/banners/swordfightingbaseplate.png"),
-            baseplate: chrome.runtime.getURL("img/games/website/banners/baseplate.png")
+            baseplate: chrome.runtime.getURL("img/games/website/banners/baseplate.png"),
+            Glasshouses: chrome.runtime.getURL("img/games/website/banners/Glasshouses.webp")
         },
 
         icons: {
@@ -27,7 +28,8 @@ const importedAssets = {
             partyexe: chrome.runtime.getURL("img/games/website/icons/party-exe.png"),
             sfoth: chrome.runtime.getURL("img/games/website/icons/sfoth.webp"),
             swordfightingbaseplate: chrome.runtime.getURL("img/games/website/icons/swordfightingbaseplate.png"),
-            baseplate: chrome.runtime.getURL("img/games/website/icons/baseplate.png")
+            baseplate: chrome.runtime.getURL("img/games/website/icons/baseplate.png"),
+            Glasshouses: chrome.runtime.getURL("img/games/website/icons/Glasshouses.webp")
         }
     },
     mapdata: {
@@ -37,6 +39,7 @@ const importedAssets = {
         SFBaseplate: chrome.runtime.getURL("files/mapdata/SFBaseplate.json"),
         SFOTH: chrome.runtime.getURL("files/mapdata/SFOTH.json"),
         Baseplate: chrome.runtime.getURL("files/mapdata/Baseplate.json"),
+        Glasshouses: chrome.runtime.getURL("files/mapdata/Glasshouses.json"),
     }
 };
 

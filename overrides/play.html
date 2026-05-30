@@ -1,18 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><base href="/">
+
+<head>
+    <base href="/">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vortex 2+2</title>
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <script src="test"></script>
-    <script src="/lib/three.min.js"></script>
+    <script src="/lib/three.min.js" type="module"></script>
     <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js"></script>
-    <script src="/lib/FBXLoader.js"></script>
-    <script src="/lib/cannon.min.js"></script>
+    <!--script src="/lib/FBXLoader.js" type="module"></script>
+    <script src="/lib/BufferGeometryUtils.js" type="module"></script>
+    <script src="/lib/cannon.min.js"></script><!-->
+    <script type="importmap">
+    {
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+    }
+    </script>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
 </head>
+
 <body>
     <div id="scene"></div>
     <div id="crosshair"></div>
@@ -66,17 +78,20 @@
 
     <div id="notif-container"></div>
 
-    <div id="purchase-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:200px;background:rgba(18,18,26,0.95);border-radius:8px;padding:14px;font-family:system-ui,sans-serif;color:#fff;">
+    <div id="purchase-modal"
+        style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:200px;background:rgba(18,18,26,0.95);border-radius:8px;padding:14px;font-family:system-ui,sans-serif;color:#fff;">
         <div id="pm-name" style="font-size:13px;font-weight:700;margin-bottom:2px;"></div>
         <div id="pm-price" style="font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:12px;"></div>
         <div style="display:flex;gap:6px;">
-            <button id="pm-cancel" style="flex:1;padding:7px 0;border:none;border-radius:6px;background:rgba(255,255,255,0.08);color:#fff;font-size:12px;cursor:pointer;">Cancel</button>
-            <button id="pm-get" style="flex:1;padding:7px 0;border:none;border-radius:6px;background:#2563EB;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">Get</button>
+            <button id="pm-cancel"
+                style="flex:1;padding:7px 0;border:none;border-radius:6px;background:rgba(255,255,255,0.08);color:#fff;font-size:12px;cursor:pointer;">Cancel</button>
+            <button id="pm-get"
+                style="flex:1;padding:7px 0;border:none;border-radius:6px;background:#2563EB;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">Get</button>
         </div>
     </div>
 
     <script src="/js/avatar.js"></script>
-    <script src="/js/vortex-engine.js"></script>
+    <script src="/js/vortex-engine.js" type="module"></script>
     <script>
         document.getElementById('settings-btn').addEventListener('click', () => {
             const p = document.getElementById('settings-panel');
@@ -84,7 +99,7 @@
         });
 
         const sensSlider = document.getElementById('sp-sens');
-        const sensVal    = document.getElementById('sp-sens-val');
+        const sensVal = document.getElementById('sp-sens-val');
 
         const savedSens = parseFloat(localStorage.getItem('vortex_sens') || '1');
         sensSlider.value = savedSens;
@@ -98,12 +113,12 @@
             localStorage.setItem('vortex_sens', v);
         });
 
-        const GREEN    = 0x4db84b;
-        const RED_C    = 0xc4281c;
+        const GREEN = 0x4db84b;
+        const RED_C = 0xc4281c;
         const _PAD_BLUE = 0x0d69ac;
 
-        let _marketItems  = {};
-        let _ownedIds     = new Set();
+        let _marketItems = {};
+        let _ownedIds = new Set();
         let _currentItemId = undefined;
 
         function _setPadColor(pad, hex) {
@@ -143,7 +158,7 @@
                 } else {
                     _currentItemId = null;
                 }
-            } catch(e) { _currentItemId = null; }
+            } catch (e) { _currentItemId = null; }
             _refreshPadColors();
         }
 
@@ -167,14 +182,14 @@
         _initMarketplace();
 
         let _activeShirtPad = null;
-        let _promptOpen     = false;
-        let _promptPad      = null;
+        let _promptOpen = false;
+        let _promptPad = null;
 
-        const _modal    = document.getElementById('purchase-modal');
-        const _pmName   = document.getElementById('pm-name');
-        const _pmPrice  = document.getElementById('pm-price');
+        const _modal = document.getElementById('purchase-modal');
+        const _pmName = document.getElementById('pm-name');
+        const _pmPrice = document.getElementById('pm-price');
         const _pmCancel = document.getElementById('pm-cancel');
-        const _pmGet    = document.getElementById('pm-get');
+        const _pmGet = document.getElementById('pm-get');
 
         function _equipShirt(pad) {
             if (_currentItemId === pad.item_id) return;
@@ -191,22 +206,22 @@
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ shirt_id: pad.item_id }),
-            }).catch(() => {});
+            }).catch(() => { });
         }
 
         function _showPrompt(pad) {
             const item = _marketItems[pad.item_id];
             if (!item) return;
-            _promptPad  = pad;
+            _promptPad = pad;
             _promptOpen = true;
-            _pmName.textContent  = item.name;
+            _pmName.textContent = item.name;
             _pmPrice.textContent = item.price === 0 ? 'FREE' : item.price + ' coins';
             _modal.style.display = 'block';
         }
 
         function _closePrompt() {
-            _promptOpen          = false;
-            _promptPad           = null;
+            _promptOpen = false;
+            _promptPad = null;
             _modal.style.display = 'none';
         }
 
@@ -235,13 +250,13 @@
                     _ownedIds.add(pad.item_id);
                     _equipShirt(pad);
                 }
-            } catch(e) {}
+            } catch (e) { }
         }
 
         window._onEngineClick = () => {
             if (!_promptOpen) return false;
             const co = window._vortex.cursorOver;
-            if (co(_pmGet))    { _doPurchase(); return true; }
+            if (co(_pmGet)) { _doPurchase(); return true; }
             if (co(_pmCancel)) { _closePrompt(); return true; }
             return true;
         };
@@ -261,7 +276,7 @@
             let hit = null;
             for (const pad of window.SHIRT_PADS) {
                 const dx = p.x - pad.x, dz = p.z - pad.z;
-                if (dx*dx + dz*dz < 6.25) { hit = pad; break; }
+                if (dx * dx + dz * dz < 6.25) { hit = pad; break; }
             }
             if (hit !== _activeShirtPad) {
                 _activeShirtPad = hit;
@@ -276,4 +291,5 @@
     <script src="/js/chat.js"></script>
     <script src="/js/notifications.js"></script>
 </body>
+
 </html>

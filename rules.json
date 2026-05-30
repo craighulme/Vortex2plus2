@@ -56,7 +56,7 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/three.min.js"
+        "extensionPath": "/overrides/three.module.js"
       }
     },
     "condition": {
@@ -73,7 +73,7 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/FBXLoader.js"
+        "extensionPath": "/overrides/FBXLoader2.js"
       }
     },
     "condition": {
@@ -250,6 +250,22 @@
       "urlFilter": "styles.css",
       "resourceTypes": [
         "stylesheet"
+      ]
+    }
+  },
+  {
+    "id": 17,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/BufferGeometryUtils.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "BufferGeometryUtils.js",
+      "resourceTypes": [
+        "script"
       ]
     }
   }

@@ -1,6 +1,19 @@
 //Made by inuk, for https://github.com/inuk84/Vortex-2-plus-2
 console.log('VORTEX ENGINE OVERRIDDEN!')
 
+import * as THRE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import * as BufferGeometryUtils
+from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js";
+import { FBXLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/FBXLoader.js";
+
+const THREE = {
+    ...THRE,
+    FBXLoader : FBXLoader
+};
+
+// expose globally for old scripts
+window.THREE = THREE;
+
 const _loadingScreen = document.createElement("div");
 _loadingScreen.id = "loadingScreen";
 const _loadingLogo = document.createElement("div");
@@ -26,8 +39,8 @@ THREE.DefaultLoadingManager.onStart = function (url, loaded, total) {
 THREE.DefaultLoadingManager.onProgress = function (url, loaded, total) {
     if (_worldBuilt) return;
     _loadingBarFill.style.width = (loaded / total) * 100 + "%";
-    if(loaded>=total){
-        _worldBuilt=true;
+    if (loaded >= total) {
+        _worldBuilt = true;
         _loadingScreen.classList.add("hidden");
     }
 };
@@ -38,6 +51,7 @@ THREE.DefaultLoadingManager.onLoad = function () { };
 const STUDS_PER_TILE = 4;
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x87CEEB, 192, 486);
+window.scene=scene;
 
 let fov = 85;
 const camera = new THREE.PerspectiveCamera(fov, window.innerWidth / window.innerHeight, 0.1, 3200);
@@ -50,8 +64,10 @@ renderer.shadowMap.enabled = enableShadows === 'yes';
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.antialias = false;
 renderer.powerPreference = "high-performance";
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+renderer.toneMapping = THREE.NeutralToneMapping;
 document.getElementById("scene").appendChild(renderer.domElement);
-
+window.renderer=renderer;
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -60,8 +76,9 @@ window.addEventListener('resize', () => {
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.45);
 scene.add(ambient);
+window.ambient=ambient;
 
-const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+const sun = new THREE.DirectionalLight(0xffffff, 3);
 sun.position.set(1600, 3200, 1600);
 sun.castShadow = enableShadows === 'yes';
 sun.shadow.mapSize.width = 5000;
@@ -73,7 +90,13 @@ sun.shadow.camera.right = 256;
 sun.shadow.camera.top = 256;
 sun.shadow.camera.bottom = -256;
 sun.shadow.autoUpdate = true;
+sun.shadow.bias = -0.000002;
 scene.add(sun);
+const backLight = new THREE.DirectionalLight(0xffffff, 0.4);
+backLight.position.set(-1600, 5000, -1600);
+backLight.castShadow=false;
+window.backLight=backLight;
+scene.add(backLight);
 
 const tlLoader = new THREE.TextureLoader();
 const texCache = new Map();
@@ -90,42 +113,180 @@ function studNormalTex(rx, ry) {
     t.repeat.set(rx, ry);
     return t;
 }
+function makeCube(width, height, depth) {
+    const geo = new THREE.BoxGeometry(width, height, depth);
+    const flat = geo.toNonIndexed();
+    const pos = flat.attributes.position;
+    const uv = [];
+    for (let i = 0; i < pos.count; i += 6) {
+        const verts = [];
+        for (let v = 0; v < 6; v++) {
+            verts.push({
+                x: pos.getX(i + v),
+                y: pos.getY(i + v),
+                z: pos.getZ(i + v),
+            });
+        }
+        const axes = ['x', 'y', 'z'];
+        const varying = axes.filter(a => {
+            const vals = verts.map(v => v[a]);
+            return Math.max(...vals) - Math.min(...vals) > 0;
+        });
+        const [uAxis, vAxis] = varying;
+        const uMin = Math.min(...verts.map(v => v[uAxis]));
+        const vMin = Math.min(...verts.map(v => v[vAxis]));
+        for (let v = 0; v < 6; v++) {
+            uv.push(
+                verts[v][uAxis] - uMin,
+                verts[v][vAxis] - vMin,
+            );
+        }
+    }
+    flat.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    return flat;
+}
+
+function makeQuadSphere(radius, subs) {
+    const geometry = new THREE.BoxGeometry(radius, radius, radius, subs, subs, subs);
+    const pos = geometry.attributes.position;
+    const normal = new THREE.Float32BufferAttribute(pos.count * 3, 3);
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i);
+        v.normalize().multiplyScalar(radius);
+        pos.setXYZ(i, v.x, v.y, v.z);
+        normal.setXYZ(i, v.x / radius, v.y / radius, v.z / radius);
+    }
+    geometry.setAttribute("normal", normal);
+    return geometry;
+}
+
+function makeWedge(width, height, depth) {
+    const shape = new THREE.Shape();
+    const hw = width * 0.5;
+    const hh = height * 0.5;
+    shape.moveTo(-hw, -hh);
+    shape.lineTo(hw, -hh);
+    shape.lineTo(hw, hh);
+    shape.lineTo(-hw, -hh);
+    const extrudeSettings = {
+        depth,
+        bevelEnabled: false
+    };
+    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    geometry.center();
+    return geometry;
+}
+
+function makeCornerWedge(width, height, depth) {
+    const hw = width * 0.5;
+    const hh = height * 0.5;
+    const hd = depth * 0.5;
+    let geometry = new THREE.BufferGeometry();
+    const vertices = [
+        hw, -hh, -hd, // 0
+        -hw, -hh, -hd, // 1
+        hw, -hh, hd, // 2
+        -hw, -hh, hd, // 3
+        -hw, hh, -hd, // 4
+    ];
+    const indices = [
+        1, 2, 3,
+        0, 2, 1,
+
+        0, 1, 4,
+
+        4, 1, 3,
+
+        2, 0, 4,
+        2, 4, 3,
+    ];
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
+    geometry = geometry.toNonIndexed();
+    geometry.computeVertexNormals();
+    const diagDepth = height + depth  /*Math.sqrt(height*height+depth*depth)*/;
+    const diagWidth = height + width  /*Math.sqrt(height*height+width*width)*/;
+    const uvs = [
+        0, 0, width, depth, 0, depth,
+        width, 0, width, depth, 0, 0,
+
+        0, 0, width, 0, width, height,
+
+        depth, height, depth, 0, 0, 0,
+
+        depth, diagWidth, 0, diagWidth, 0, 0,
+
+        diagDepth, width, 0, 0, diagDepth, 0,
+    ];
+    geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    return geometry;
+}
 
 const geoCache = new Map();
 const matCache = new Map();
-const batches = new Map();
 
-function getCachedGeo(sw, sh, sd) {
-    const key = `${sw},${sh},${sd}`;
-    if (!geoCache.has(key)) geoCache.set(key, new THREE.BoxGeometry(sw, sh, sd));
-    return geoCache.get(key);
+function getCachedGeo(sw, sh, sd, shape = "Block") {
+    if (shape == "Block") {
+        const key = `${shape},${sw},${sh},${sd}`;
+        if (!geoCache.has(key)) geoCache.set(key, makeCube(sw, sh, sd));
+        return geoCache.get(key);
+    } else if (shape == "Ball") {
+        const radi = Math.min(sw, sh, sd);
+        const key = `${shape},${radi}`;
+        if (!geoCache.has(key)) geoCache.set(key, makeQuadSphere(radi * 0.5, 6));
+        return geoCache.get(key);
+    } else if (shape == "Cylinder") {
+        const radi = Math.min(sh, sd);
+        const key = `${shape},${radi},${sw}`;
+        if (!geoCache.has(key)) geoCache.set(key, new THREE.CylinderGeometry(radi * 0.5, radi * 0.5, sw, 20, 1));
+        return geoCache.get(key);
+    } else if (shape == "Wedge") {
+        const key = `${shape},${sw},${sh},${sd}`;
+        if (!geoCache.has(key)) geoCache.set(key, makeWedge(sd, sh, sw));
+        return geoCache.get(key);
+    } else if (shape == "CornerWedge") {
+        const key = `${shape},${sw},${sh},${sd}`;
+        if (!geoCache.has(key)) geoCache.set(key, makeCornerWedge(sd, sh, sw));
+        return geoCache.get(key);
+    } else {
+        console.log(`unknown shape: ${shape}`)
+    }
 }
 
-function getCachedMats(sw, sh, sd, color) {
-    const key = `${sw},${sh},${sd},${color}`;
-    if (matCache.has(key)) return matCache.get(key);
-    const m = (rx, ry) => new THREE.MeshPhongMaterial({ color: color, map: studTex(rx, ry), normalMap: studNormalTex(rx, ry), shininess: 80 });
-    const mats = [
-        m(sd / STUDS_PER_TILE, sh / STUDS_PER_TILE),
-        m(sd / STUDS_PER_TILE, sh / STUDS_PER_TILE),
-        m(sw / STUDS_PER_TILE, sd / STUDS_PER_TILE),
-        m(sw / STUDS_PER_TILE, sd / STUDS_PER_TILE),
-        m(sw / STUDS_PER_TILE, sh / STUDS_PER_TILE),
-        m(sw / STUDS_PER_TILE, sh / STUDS_PER_TILE),
-    ];
-    matCache.set(key, mats);
-    return mats;
-}
-
-const instancedMeshes = new Map();
-const MAX_INSTANCES = 1024;
-
-function getInstanceKey(sw, sh, sd, color) { return `${sw},${sh},${sd},${color}`; }
-
-function flushInstances() {
-    for (const [, entry] of instancedMeshes) {
-        entry.mesh.count = entry.count;
-        entry.mesh.instanceMatrix.needsUpdate = true;
+function getCachedMats(sw, sh, sd, color, shape = "Block", transparency = 0) {
+    if (shape == "Block" || shape == "Wedge" || shape == "CornerWedge") {
+        const key = `c${color}t${transparency}`;
+        if (matCache.has(key)) return matCache.get(key);
+        const m = (rx, ry) => new THREE.MeshPhongMaterial({ color: color, map: studTex(rx, ry), normalMap: studNormalTex(rx, ry), shininess: 80, transparent: transparency > 0, opacity: 1 - transparency });
+        const mats = m(1 / STUDS_PER_TILE, 1 / STUDS_PER_TILE);
+        matCache.set(key, mats);
+        return mats;
+    } else if (shape == "Ball") {
+        const radi = Math.min(sw, sh, sd);
+        const key = `s${shape},r${radi},c${color}t${transparency}`;
+        if (matCache.has(key)) return matCache.get(key);
+        const m = (rx, ry) => new THREE.MeshPhongMaterial({ color: color, map: studTex(rx, ry), normalMap: studNormalTex(rx, ry), shininess: 80, transparent: transparency > 0, opacity: 1 - transparency });
+        const mats = m(radi / STUDS_PER_TILE, radi / STUDS_PER_TILE);
+        matCache.set(key, mats);
+        return mats;
+    } else if (shape == "Cylinder") {
+        const radi = Math.min(sh, sd);
+        const cylen = sw;
+        const key = `s${shape},r${radi},l${cylen},c${color}t${transparency}`;
+        if (matCache.has(key)) return matCache.get(key);
+        const m = (rx, ry) => new THREE.MeshPhongMaterial({ color: color, map: studTex(rx, ry), normalMap: studNormalTex(rx, ry), shininess: 80, transparent: transparency > 0, opacity: 1 - transparency });
+        let uh = radi * Math.PI / STUDS_PER_TILE;
+        if (radi > 0.5) {
+            uh = Math.round(uh);
+        }
+        const mats = [
+            m(uh, cylen / STUDS_PER_TILE),
+            m(radi / STUDS_PER_TILE, radi / STUDS_PER_TILE),
+            m(radi / STUDS_PER_TILE, radi / STUDS_PER_TILE)
+        ];
+        matCache.set(key, mats);
+        return mats;
     }
 }
 
@@ -137,48 +298,64 @@ const chunkMap = new Map();
 const _dummy = new THREE.Object3D();
 const stud_datas = [];
 const objects = [];
-function addStud(sw, sh, sd, color, x, y, z, rx = 0, ry = 0, rz = 0) {
-    const mesh = new THREE.Mesh(
-        getCachedGeo(sw, sh, sd),
-        getCachedMats(sw, sh, sd, color)
-    );
-    const cy = y + sh / 2;
-    mesh.position.set(x, cy, z);
-    if (rx !== 0 || ry !== 0 || rz !== 0) mesh.rotation.set(rx, ry, rz);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.matrixAutoUpdate = false;
-    mesh.frustumCulled = true;
-    mesh.updateMatrix();
-    scene.add(mesh);
-    let b;
-    if (rx === 0 && ry === 0 && rz === 0) {
-        b = {
-            minX: x - sw / 2, maxX: x + sw / 2,
-            minY: y, maxY: y + sh,
-            minZ: z - sd / 2, maxZ: z + sd / 2,
-        };
-        colliders.push(b);
-        insertToChunks(b);
-    } else {
-        ry = ry % 360
-        while (ry > 45) {
-            ry -= 45
-            sx, sz = sz, -sx
+function addStud(sw, sh, sd, color, x, y, z, rx = 0, ry = 0, rz = 0, shape = "Block", transparency = 0) {
+        const mesh = new THREE.Mesh(
+            getCachedGeo(sw, sh, sd, shape),
+            getCachedMats(sw, sh, sd, color, shape, transparency)
+        );
+        const cy = y + sh / 2;
+        mesh.rotation.order = 'YXZ';
+        if (shape == "Cylinder") {
+            mesh.position.set(x, cy, z);
+            mesh.rotation.set(rx, ry, rz + Math.PI * 0.5);
+        } else if (shape == "Wedge") {
+            mesh.position.set(x, cy, z);
+            mesh.rotation.set(rx, ry, rz);
+            mesh.rotateOnAxis(new THREE.Vector3(0, 1, 0), - Math.PI * 0.5)
+        } else if (shape == "CornerWedge") {
+            mesh.position.set(x, cy, z);
+            mesh.rotation.set(rx, ry, rz);
+            mesh.rotateOnAxis(new THREE.Vector3(0, 1, 0), - Math.PI * 0.5)
+        } else {
+            mesh.position.set(x, cy, z);
+            mesh.rotation.set(rx, ry, rz);
         }
-        b = buildOBB(sw, sh, sd, x, cy, z, rx, ry, rz);
-        colliders.push(b);
-        insertToChunks(b);
-    }
-    let stud_id = stud_datas.push({ mesh, b }) - 1;
-    mesh.stud_id = stud_id;
-    objects.push(mesh);
-    return [mesh, stud_id];
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.matrixAutoUpdate = false;
+        mesh.frustumCulled = true;
+        mesh.updateMatrix();
+        scene.add(mesh);
+        let b;
+        if (rx === 0 && ry === 0 && rz === 0) {
+            b = {
+                minX: x - sw / 2, maxX: x + sw / 2,
+                minY: y, maxY: y + sh,
+                minZ: z - sd / 2, maxZ: z + sd / 2,
+            };
+            colliders.push(b);
+            insertToChunks(b);
+        } else {
+            ry = ry % 360
+            while (ry > 45) {
+                ry -= 45
+                sx, sz = sz, -sx
+            }
+            b = buildOBB(sw, sh, sd, x, cy, z, rx, ry, rz);
+            colliders.push(b);
+            insertToChunks(b);
+        }
+        let stud_id = stud_datas.push({ mesh, b }) - 1;
+        mesh.stud_id = stud_id;
+        objects.push(mesh);
+        return [mesh, stud_id];
 }
+
+window.addStud=addStud;
 
 
 function buildOBB(sw, sh, sd, cx, cy, cz, rx, ry, rz) {
-    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz));
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz, 'YXZ'));
     const e = m.elements;
 
     const ux = e[0], uy = e[1], uz = e[2];
@@ -201,13 +378,6 @@ function buildOBB(sw, sh, sd, cx, cy, cz, rx, ry, rz) {
         minZ: cz - ez, maxZ: cz + ez,
     };
 }
-
-const ground = new THREE.Mesh(
-    getCachedGeo(320, 3.2, 320),
-    getCachedMats(320, 3.2, 320, 0x4db84b)
-);
-ground.receiveShadow = true;
-scene.add(ground);
 
 function chunkKey(cx, cy, cz) { return `${cx},${cy},${cz}`; }
 function worldToChunk(x) { return Math.floor(x / CHUNK_SIZE); }
@@ -279,6 +449,7 @@ function removeStud(stud_id) {
         stud_datas[stud_id] = null;
     }
 }
+window.removeStud = removeStud;
 
 const _nearbySet = new Set();
 
@@ -395,7 +566,7 @@ let grounded = true;
 let stepUpTarget = -Infinity;
 const pushedBlocks = new Set();
 let shiftLock = false;
-let locked = false;
+window.locked = false;
 let coyoteTimer = 0;
 let jumpBuffer = 0;
 const COYOTE_TIME = 0.12;
@@ -464,6 +635,7 @@ let _spawnPoint = { x: 0, y: null, z: 0, ry: Math.PI };
 let _shirtMesh = null;
 
 const fbxLoader = new THREE.FBXLoader();
+window.fbxLoader = fbxLoader;
 fbxLoader.load('assets/models/player.fbx', (fbx) => {
     //const helper = new THREE.SkeletonHelper(fbx.children[0]);
     //scene.add(helper);
@@ -531,7 +703,7 @@ function setMouseLock(sl) {
 let isFirstPerson = false;
 document.addEventListener('keydown', e => {
     if (window._chatFocused) return;
-    if (!locked) return;
+    if (!window.locked) return;
     keys[e.code] = true;
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
         shiftLock = !shiftLock;
@@ -545,8 +717,8 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
 document.addEventListener('pointerlockchange', () => {
-    locked = !!document.pointerLockElement;
-    if (locked) {
+    window.locked = !!document.pointerLockElement;
+    if (window.locked) {
         overlay.style.opacity = 0;
         cursorEl.style.transform = `translate(${cursorX}px, ${cursorY}px)`;
     } else {
@@ -564,12 +736,13 @@ function _cursorOver(el) {
     const r = el.getBoundingClientRect();
     return cursorX >= r.left && cursorX <= r.right && cursorY >= r.top && cursorY <= r.bottom;
 }
+window._cursorOver=_cursorOver;
 
 
 const chatEl = document.getElementById('chat-window');
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 renderer.domElement.addEventListener('click', () => {
-    if (locked) {
+    if (window.locked) {
         const cursorOver = _cursorOver;
         let guiHandled = false;
         const topbarEl = document.getElementById('hud-topbar');
@@ -653,7 +826,7 @@ toggleShadowsleftText.className = 'sp-label';
 toggleShadowsleftText.innerText = 'Toggle shadows'
 let toggleShadowsCheckBox = document.createElement('input');
 toggleShadowsCheckBox.type = "checkbox";
-if (enableShadows==='yes') {
+if (enableShadows === 'yes') {
     toggleShadowsCheckBox.click();
 }
 toggleShadowsCheckBox.onchange = function () {
@@ -758,8 +931,9 @@ const BLOCK_COLORS = [
     0x103C46,  // dark cyan
     0x1A237A,  // dark blue
 ];
-
+window.BLOCK_COLORS=BLOCK_COLORS;
 const MAX_BLOCKS = 2000;
+window.MAX_BLOCKS=MAX_BLOCKS;
 
 function validPlacement(x, y, z) {
     if (myBlocks.length >= MAX_BLOCKS) return false
@@ -769,6 +943,7 @@ function validPlacement(x, y, z) {
     if (y <= 1.5) return false
     return true;
 }
+window.validPlacement=validPlacement;
 
 let BlockDisplayMesh;
 let selectedBlockState = 1;
@@ -820,6 +995,7 @@ function update_Display_Block() {
 
 let toolbuttons = []
 let blockCounter;
+window.blockCounter=undefined;
 async function makeToolButtons() {
     if (!window.map) {
         setTimeout(() => {
@@ -871,6 +1047,7 @@ async function makeToolButtons() {
         }
 
         blockCounter = document.createElement('p');
+        window.blockCounter=blockCounter;
         blockCounter.style = "height: 32px;color: rgb(255 255 255 / 90%) !important;position: absolute;left: 30%;width: 40%;bottom: 100px;text-align: center;text-shadow: 1px 1px 5px black;";
         blockCounter.innerText = '0/' + MAX_BLOCKS;
         toolbar.appendChild(blockCounter);
@@ -885,7 +1062,7 @@ let _sliderDragPreciseValue = 0;
 let canSlice = true;
 renderer.domElement.addEventListener('mousedown', e => {
     if (e.button === 2) { rmb = true; return; }
-    if (e.button === 0 && locked) {
+    if (e.button === 0 && window.locked) {
         if (settingsPanel && settingsPanel.style.display !== 'none') {
             for (const slider of settingsPanel.querySelectorAll('input[type=range]')) {
                 if (_cursorOver(slider)) { _sliderDrag = slider; _sliderDragPreciseValue = parseFloat(slider.value); return; }
@@ -935,7 +1112,7 @@ document.addEventListener('mouseup', e => {
 });
 
 document.addEventListener('mousemove', e => {
-    if (!locked) return;
+    if (!window.locked) return;
     if (_sliderDrag) {
         cursorX = Math.max(0, Math.min(window.innerWidth, cursorX + e.movementX));
         cursorY = Math.max(0, Math.min(window.innerHeight, cursorY + e.movementY));
@@ -959,7 +1136,7 @@ document.addEventListener('mousemove', e => {
 });
 let camWantDist = cam.distance;
 renderer.domElement.addEventListener('wheel', e => {
-    if (locked) {
+    if (window.locked) {
         for (const id of ['chat-messages', 'lb-body']) {
             const el = document.getElementById(id);
             if (!el) continue;
@@ -1416,6 +1593,14 @@ function update(dt) {
     let cdlerp = dt * 20;
     if (keys['KeyI']) camWantDist = Math.max(cam.minDist, camWantDist * (1 - CAM_KEY_ZOOM_SPEED * dt * 0.05) - CAM_KEY_ZOOM_SPEED * dt * 0.9);
     if (keys['KeyO']) camWantDist = Math.min(cam.maxDist, camWantDist * (1 + CAM_KEY_ZOOM_SPEED * dt * 0.05) + CAM_KEY_ZOOM_SPEED * dt * 0.9);
+    if (keys['KeyI'] || keys['KeyO']) {
+        if (camWantDist < 2) {
+            camWantDist = 2
+            setMouseLock(true)
+        } else {
+            setMouseLock(shiftLock)
+        }
+    }
     cam.distance = cam.distance * (1 - cdlerp) + camWantDist * cdlerp;
 
     if (climbState === 'hanging') {
@@ -1700,7 +1885,7 @@ function updateCamera() {
     );
     camera.lookAt(pivot);
 }
-let canPlaySounds = false;
+window.canPlaySounds = false;
 let sword;
 let loadingSword = false;
 let died = false;
@@ -1750,7 +1935,7 @@ function swordUpdate() {
     }
 
     if (playerSpecialValues.health <= 0 && !died) {
-        if (canPlaySounds) {
+        if (window.canPlaySounds) {
             oofSound.play()
         }
         let sp = window.chooseSpawnPoint(window.map);
@@ -1833,8 +2018,9 @@ async function loadMapVortex(path, tx = 0, ty = 0, tz = 0) {
 
 console.log(window.SWORD_FIGHT)
 let gameSong;
-let gameSongVolume = 1.;
+let gameSongVolume = 0.9;
 makeSettingsSlider('Music volume', 0, 1, 0.9, 0.1, function (slider, val) {
+    gameSongVolume = val;
     if (gameSong) {
         gameSong.volume = val;
     }
@@ -1847,7 +2033,7 @@ makeSettingsSlider('Sfx volume', 0, 1, 1, 0.1, function (slider, val) {
 
 overlay.addEventListener('click', () => {
     if (leaveButton.matches(':hover')) { return }
-    canPlaySounds = true;
+    window.canPlaySounds = true;
     if (window.SWORD_FIGHT || window.BUILD_MODE) {
         if (!gameSong) {
             gameSong = new Audio(window.SWORD_FIGHT && importedAssets.sfothSong || importedAssets.buildSong);
