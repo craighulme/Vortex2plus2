@@ -1,5 +1,8 @@
+# Vortex2+2
 Vortex2+2 is an extension for [vortex](https://vortex.towerstats.com/) to add many more features
 Please join the [Vortex2+2 & AIS discord server](https://discord.gg/3Rphp3duKR) to get early releases and sneak peaks, and submit suggestions for vortex2+2 and AIS!
+
+## WARNING: multiplayer no longer works due to app release and removal of websocket server.
 
 Credits:
 - Search engine originally created by enk, modified and used with permission
