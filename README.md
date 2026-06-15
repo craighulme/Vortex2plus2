@@ -1,10 +1,26 @@
 # Vortex2+2
-Vortex2+2 is an extension for [vortex](https://vortex.towerstats.com/) to add many more features
+Vortex2+2 is an extension for [Vortex](https://playvortex.io/) to add many more features.
 Please join the [Vortex2+2 & AIS discord server](https://discord.gg/3Rphp3duKR) to get early releases and sneak peaks, and submit suggestions for vortex2+2 and AIS!
 
-## WARNING: multiplayer no longer works due to app release and removal of websocket server.
+## Browser play
+
+This fork injects a `Play in Browser` button on `https://playvortex.io/games/{id}`. The button fetches the normal Vortex launch token with your existing browser login and opens the Vortex2+2 browser client.
+
+The official app now uses UDP for live multiplayer. Browser extensions cannot open UDP sockets, so live Vortex multiplayer uses a small local WebSocket-to-UDP relay.
+
+Setup:
+
+```bat
+Register-NativeBridgeProtocol.cmd
+Start-NativeBridge.cmd
+```
+
+`Register-NativeBridgeProtocol.cmd` registers `v22bridge://`, which lets the extension start the relay automatically. `Start-NativeBridge.cmd` starts the same relay manually. The relay does not launch or inject the native Vortex app; it verifies the short-lived browser launch token and talks to the current Vortex UDP server directly.
+
+The relay URL is `ws://127.0.0.1:27822/ws`. The extension popup should use that URL for live multiplayer.
 
 Credits:
+- Native UDP protocol research and browser multiplayer bridge by [@craighulme23](https://github.com/craighulme23)
 - Search engine originally created by enk, modified and used with permission
 - Maps:
 - Crossroads by Shedletsky

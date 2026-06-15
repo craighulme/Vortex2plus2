@@ -363,6 +363,14 @@
       }
     },
 
+    getPlayer(id) {
+      return players.find((p) => p.id === id) || null;
+    },
+
+    getPlayers() {
+      return [...players];
+    },
+
     selectPlayer: openPlayerPanel,
 
     closeFriendPanel() {

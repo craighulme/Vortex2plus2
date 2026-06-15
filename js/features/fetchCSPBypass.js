@@ -2,6 +2,7 @@ const fet = fetch;
 window.addEventListener("message", async (event) => {
     if (event.source !== window) return;
     const type = event.data?.type;
+    if (typeof type !== 'string') return;
     if (!type.startsWith('fetch') || type.endsWith('Response')) return;
     const url = new URL(event.data.payload1, location.href).href;
     const corsio = (url.startsWith("http") && !url.match('towerstats.com'));

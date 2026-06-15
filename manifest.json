@@ -10,7 +10,8 @@
     "128": "img/icon/128.png"
   },
   "host_permissions": [
-    "https://vortex.towerstats.com/"
+    "https://playvortex.io/*",
+    "https://vortex.towerstats.com/*"
   ],
   "permissions": [
     "storage",
@@ -24,6 +25,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://playvortex.io/*",
         "https://vortex.towerstats.com/*"
       ],
       "css": [
@@ -37,6 +39,7 @@
     },
     {
       "matches": [
+        "https://playvortex.io/search*",
         "https://vortex.towerstats.com/search*"
       ],
       "js": [
@@ -44,8 +47,15 @@
       ]
     },
     {
-      "matches": ["https://vortex.towerstats.com/*"],
-      "js": ["js/webVortexLoader.js","js/lightMode.js"],
+      "matches": [
+        "https://playvortex.io/*",
+        "https://vortex.towerstats.com/*"
+      ],
+      "js": [
+        "js/webVortexLoader.js",
+        "js/lightMode.js",
+        "js/features/PlayInBrowserButton.js"
+      ],
       "run_at": "document_start"
     }
   ],

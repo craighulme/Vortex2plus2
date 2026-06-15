@@ -56,7 +56,7 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/three.module.js"
+        "extensionPath": "/overrides/libs/three.module.js"
       }
     },
     "condition": {
@@ -73,7 +73,7 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/FBXLoader2.js"
+        "extensionPath": "/overrides/libs/FBXLoader.js"
       }
     },
     "condition": {
@@ -159,28 +159,11 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/inflate.min.js"
+        "extensionPath": "/overrides/libs/inflate.min.js"
       }
     },
     "condition": {
       "urlFilter": "inflate.min.js",
-      "resourceTypes": [
-        "script",
-        "xmlhttprequest"
-      ]
-    }
-  },
-  {
-    "id": 11,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/overrides/profanity-cleaner.min.js"
-      }
-    },
-    "condition": {
-      "urlFilter": "profanity-cleaner.min.js",
       "resourceTypes": [
         "script",
         "xmlhttprequest"
@@ -210,7 +193,7 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/cannon.min.js"
+        "extensionPath": "/overrides/libs/cannon.min.js"
       }
     },
     "condition": {
@@ -259,7 +242,7 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/BufferGeometryUtils.js"
+        "extensionPath": "/overrides/libs/BufferGeometryUtils.js"
       }
     },
     "condition": {

@@ -330,5 +330,4 @@ const loadDemo = (async function () {
         window._vortex.finishWorld();
     }
 
-    console.log('demoparts loaded')
 });

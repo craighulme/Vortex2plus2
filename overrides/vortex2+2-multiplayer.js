@@ -1,4 +1,3 @@
-//Made by Inuk
 if (typeof COLORS == 'undefined') {
     const COLORS = ['#1a1a1a', '#2563EB', '#16A34A', '#9333EA', '#D97706', '#DC2626', '#0891B2'];
 }
@@ -174,7 +173,6 @@ function _animateRemote(id, r, dt) {
         let sword = swords.get(id);
         if (!swords.has(id)) {
             swords.set(id, false);
-            console.log('no sword for id ' + id + ', making one now!')
             fbxLoader.load(importedAssets.swordMdl, (fbx) => {
                 fbx.scale.multiplyScalar(0.005);
                 sword = fbx;
@@ -399,7 +397,6 @@ function _healthbarDrawingLoop(id) {
         customPlayerData[id] = playerSpecialValues
     }
     if (!customPlayerData[id]) {
-        console.log('no custom player data found id: ' + id)
         setTimeout(() => { _healthbarDrawingLoop(id) }, 500);
     } else {
         _redrawHealthbar(id, customPlayerData[id].health);
@@ -415,7 +412,7 @@ function _showHealthBar(id) {
 }
 
 function _updateBubblePositions() {
-    let bubbleOffset = window.SWORD_FIGHT ? 0.8 : 0.4; //originally 0.4
+    let bubbleOffset = window.SWORD_FIGHT ? 0.8 : 0.4;
     let bubbleBase = _vortex.getCharHeight() - _vortex.getCharFootOffset() + bubbleOffset;
     for (const [id, b] of _bubbles) {
         if (!b.sprite || !b.msgs.length) { if (b.sprite) b.sprite.visible = false; continue; }
@@ -453,11 +450,19 @@ function _updateBubblePositions() {
 }
 
 const remotes = new Map();
+window._vortexRemotes = remotes;
 let myId = null;
 let ws = null;
 let broadcastTimer = null;
+let bridgeConfig = null;
+let launchInfo = null;
+let connectPromise = null;
+let connectFinished = false;
+let animClock = 0;
+let hubMode = false;
 
 const _pendingAvatars = new Map();
+const _pendingBubbles = new Map();
 
 let _friendIds = new Set();
 let _incomingIds = new Set();
@@ -487,24 +492,466 @@ async function fetchFriendData() {
 
 let _reconnectAttempts = 0;
 const _MAX_RECONNECTS = 3;
+
+function randomHexToken(bytes = 32) {
+    const values = new Uint8Array(bytes);
+    crypto.getRandomValues(values);
+    return [...values].map(v => v.toString(16).padStart(2, "0")).join("");
+}
+
+function getBridgeConfig() {
+    if (bridgeConfig) return bridgeConfig;
+    const defaults = {
+        officialGameId: Number(window.GAME_ID || 0),
+        customGameId: null,
+        launchToken: "",
+        hubUrl: "ws://127.0.0.1:27822/ws"
+    };
+    const meta = document.getElementById("_vortexBridgeConfig");
+    if (!meta?.content) {
+        bridgeConfig = defaults;
+        return bridgeConfig;
+    }
+    try {
+        bridgeConfig = { ...defaults, ...JSON.parse(meta.content) };
+    } catch (e) {
+        console.warn("[mp] failed to parse bridge config", e);
+        bridgeConfig = defaults;
+    }
+    return bridgeConfig;
+}
+
+function _isLocalRelayUrl(value) {
+    try {
+        const u = new URL(value);
+        return ["localhost", "127.0.0.1", "::1"].includes(u.hostname);
+    } catch {
+        return false;
+    }
+}
+
+function bridgeOpen() {
+    return ws && ws.readyState === WebSocket.OPEN;
+}
+
+function _u64(view, off) {
+    if (off + 8 > view.byteLength) return null;
+    const v = view.getBigUint64(off, true);
+    if (v > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+    return Number(v);
+}
+
+function _u32(view, off) {
+    return off + 4 <= view.byteLength ? view.getUint32(off, true) : null;
+}
+
+function _asciiOk(text) {
+    return !!text && [...text].every(c => {
+        const n = c.charCodeAt(0);
+        return n >= 32 && n <= 126;
+    });
+}
+
+function _findField(obj, names) {
+    const wanted = new Set(names.map(n => n.toLowerCase()));
+    const seen = new Set();
+    const stack = [obj];
+    while (stack.length) {
+        const cur = stack.pop();
+        if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
+        seen.add(cur);
+        for (const [k, v] of Object.entries(cur)) {
+            if (wanted.has(k.toLowerCase())) return v;
+            if (v && typeof v === 'object') stack.push(v);
+        }
+    }
+    return undefined;
+}
+
+function _numField(obj, names, fallback = 0) {
+    const v = _findField(obj, names);
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string' && /^\d+$/.test(v)) return Number(v);
+    return fallback;
+}
+
+function _strField(obj, names, fallback = "") {
+    const v = _findField(obj, names);
+    return typeof v === 'string' ? v : fallback;
+}
+
+function _wsEndpoint(raw) {
+    const fields = [
+        "websocket_url", "websocketUrl", "ws_url", "wsUrl", "socket_url", "socketUrl",
+        "game_server", "gameServer", "server_addr", "serverAddr", "endpoint", "address"
+    ];
+    for (const name of fields) {
+        const value = _findField(raw, [name]);
+        if (typeof value === "string" && /^wss?:\/\//i.test(value)) return value;
+    }
+    const host = _strField(raw, ["ws_host", "wsHost", "websocket_host", "websocketHost"], "");
+    const port = _numField(raw, ["ws_port", "wsPort", "websocket_port", "websocketPort"], 0);
+    if (host && port) return `wss://${host}:${port}`;
+    return null;
+}
+
+async function verifyLaunchToken(cfg) {
+    const requestedClientToken = randomHexToken();
+    const res = await fetch(`/api/verify-launch?token=${encodeURIComponent(cfg.launchToken)}`, {
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+            "X-Client-Token": requestedClientToken
+        }
+    });
+    if (!res.ok) {
+        let detail = "";
+        try { detail = await res.text(); } catch {}
+        throw new Error(`verify-launch failed: HTTP ${res.status}${detail ? " " + detail : ""}`);
+    }
+    const raw = await res.json();
+    const info = {
+        raw,
+        id: _numField(raw, ["id", "user_id", "userId", "player_id", "playerId"], 0),
+        username: _strField(raw, ["username", "name", "display_name", "displayName"], "BrowserPlayer"),
+        gameId: _numField(raw, ["game_id", "gameId", "game"], Number(cfg.officialGameId || window.GAME_ID || 0)),
+        shirtId: _numField(raw, ["shirt_id", "shirtId", "clothing_id", "clothingId"], 0),
+        clientToken: _strField(raw, ["client_token", "clientToken", "token"], cfg.launchToken),
+        appToken: _strField(raw, ["app_token", "appToken"], ""),
+        requestedClientToken,
+        wsEndpoint: _wsEndpoint(raw)
+    };
+    if (!info.id) throw new Error("verify-launch response did not expose a player id");
+    return info;
+}
+
+function _parseMovementRecord(buffer, offset, hasPacketType) {
+    const view = new DataView(buffer, offset);
+    const start = hasPacketType ? 4 : 0;
+    if (view.byteLength < start + 34) return null;
+    const id = _u64(view, start);
+    const game = _u64(view, start + 8);
+    const nameLen = _u64(view, start + 16);
+    if (id == null || game == null || !nameLen || nameLen > 64) return null;
+    const nameOff = start + 24;
+    if (nameOff + nameLen > view.byteLength) return null;
+    const bytes = new Uint8Array(buffer, offset + nameOff, nameLen);
+    const name = new TextDecoder().decode(bytes);
+    if (!_asciiOk(name)) return null;
+
+    const foffNoNul = nameOff + nameLen;
+    const offsets = [foffNoNul + 1, foffNoNul, foffNoNul + 2];
+    let best = null;
+    for (const foff of offsets) {
+        if (foff + 18 > view.byteLength) continue;
+        const x = view.getFloat32(foff, true);
+        const y = view.getFloat32(foff + 4, true);
+        const z = view.getFloat32(foff + 8, true);
+        const yaw = view.getFloat32(foff + 12, true);
+        if (![x, y, z, yaw].every(Number.isFinite)) continue;
+        if (Math.abs(x) > 1000000 || Math.abs(y) > 1000000 || Math.abs(z) > 1000000) continue;
+        const rec = {
+            id, game, name, x, y, z, yaw,
+            state0: view.getUint8(foff + 16),
+            state1: view.getUint8(foff + 17),
+            animTime: foff + 22 <= view.byteLength ? view.getFloat32(foff + 18, true) : 0,
+            shirtId: _readPacketShirtId(view, foff),
+            floatOffset: foff
+        };
+        let score = 0;
+        if (rec.state0 <= 1 && rec.state1 <= 1) score += 100;
+        if (Math.abs(rec.yaw) <= 8) score += 20;
+        if (foff === foffNoNul + 1) score += 2;
+        if (!best || score > best.score) best = { rec, score };
+    }
+    return best?.rec || null;
+}
+
+function _readPacketShirtId(view, foff) {
+    let shirtId = 0;
+    if (foff + 27 <= view.byteLength && view.getUint8(foff + 22) === 1) {
+        shirtId = view.getUint32(foff + 23, true);
+    } else if (foff + 26 <= view.byteLength) {
+        shirtId = view.getUint32(foff + 22, true);
+    }
+    return shirtId > 0 && shirtId < 1000 ? shirtId : 0;
+}
+
+function _findNextRecord(buffer, off, rec) {
+    const minNext = off + rec.floatOffset + 22;
+    const maxNext = Math.min(buffer.byteLength, off + rec.floatOffset + 96);
+    for (let next = minNext; next <= maxNext; next++) {
+        if (_parseMovementRecord(buffer, next, false)) return next;
+    }
+    return null;
+}
+
+function _parsePlayersPacket(buffer) {
+    const view = new DataView(buffer);
+    if (_u32(view, 0) !== 1) return null;
+    const expected = _u64(view, 4);
+    if (expected == null) return null;
+    const records = [];
+    let off = 12;
+    while (off + 32 < buffer.byteLength && records.length < 64 && (!expected || records.length < expected)) {
+        const rec = _parseMovementRecord(buffer, off, false);
+        if (!rec) break;
+        records.push(rec);
+        const next = _findNextRecord(buffer, off, rec);
+        if (next == null) break;
+        off = next;
+    }
+    return records;
+}
+
+function _parseChatPacket(buffer) {
+    const view = new DataView(buffer);
+    if (_u32(view, 0) !== 2) return null;
+    const playerId = _u64(view, 4);
+    const nameLen = _u64(view, 12);
+    if (playerId == null || !nameLen || nameLen > 64) return null;
+    let off = 20;
+    if (off + nameLen + 8 > buffer.byteLength) return null;
+    const username = new TextDecoder().decode(new Uint8Array(buffer, off, nameLen));
+    if (!_asciiOk(username)) return null;
+    off += nameLen;
+    const msgLen = _u64(view, off);
+    if (!msgLen || msgLen > 512) return null;
+    off += 8;
+    if (off + msgLen > buffer.byteLength) return null;
+    const message = new TextDecoder().decode(new Uint8Array(buffer, off, msgLen));
+    if (!_asciiOk(message)) return null;
+    return { playerId, username, message };
+}
+
+function _writeU64(view, off, value) {
+    view.setBigUint64(off, BigInt(Math.max(0, Math.floor(value || 0))), true);
+}
+
+function _encodeMovementPacket(data) {
+    const nameBytes = new TextEncoder().encode(launchInfo.username);
+    const len = 4 + 8 + 8 + 8 + nameBytes.length + 1 + 4 + 4 + 4 + 4 + 1 + 1 + 4 + 1 + 4;
+    const buffer = new ArrayBuffer(len);
+    const view = new DataView(buffer);
+    let off = 0;
+    view.setUint32(off, 0, true); off += 4;
+    _writeU64(view, off, launchInfo.id); off += 8;
+    _writeU64(view, off, launchInfo.gameId); off += 8;
+    _writeU64(view, off, nameBytes.length); off += 8;
+    new Uint8Array(buffer, off, nameBytes.length).set(nameBytes); off += nameBytes.length;
+    view.setUint8(off, 2); off += 1;
+    view.setFloat32(off, Number(data.x || 0), true); off += 4;
+    view.setFloat32(off, Number(data.y || 0), true); off += 4;
+    view.setFloat32(off, Number(data.z || 0), true); off += 4;
+    view.setFloat32(off, Number(data.ry || 0), true); off += 4;
+    const anim = String(data.anim || "idle");
+    view.setUint8(off, anim === "idle" ? 0 : 1); off += 1;
+    view.setUint8(off, anim === "jump" ? 0 : 1); off += 1;
+    animClock += 0.05;
+    view.setFloat32(off, animClock, true); off += 4;
+    view.setUint8(off, 1); off += 1;
+    view.setUint32(off, launchInfo.shirtId || 0, true);
+    return buffer;
+}
+
+function _encodeHeartbeat() {
+    const token = String(launchInfo.clientToken || "").slice(0, 64);
+    const bytes = new TextEncoder().encode(token);
+    const buffer = new ArrayBuffer(12 + bytes.length);
+    const view = new DataView(buffer);
+    view.setUint32(0, 4, true);
+    _writeU64(view, 4, bytes.length);
+    new Uint8Array(buffer, 12, bytes.length).set(bytes);
+    return buffer;
+}
+
+function _encodeChatPacket(msg) {
+    const name = new TextEncoder().encode(launchInfo.username);
+    const text = new TextEncoder().encode(String(msg || "").slice(0, 512));
+    const buffer = new ArrayBuffer(4 + 8 + 8 + name.length + 8 + text.length + 1);
+    const view = new DataView(buffer);
+    let off = 0;
+    view.setUint32(off, 2, true); off += 4;
+    _writeU64(view, off, launchInfo.id); off += 8;
+    _writeU64(view, off, name.length); off += 8;
+    new Uint8Array(buffer, off, name.length).set(name); off += name.length;
+    _writeU64(view, off, text.length); off += 8;
+    new Uint8Array(buffer, off, text.length).set(text); off += text.length;
+    view.setUint8(off, 0);
+    return buffer;
+}
+
+function _handleNativePacket(buffer) {
+    const players = _parsePlayersPacket(buffer);
+    if (players) {
+        const converted = players.filter(p => p.id !== myId).map(p => ({
+            id: p.id,
+            username: p.name,
+            is_staff: false,
+            is_booster: false,
+            shirt_id: p.shirtId || 0,
+            x: p.x,
+            y: p.y,
+            z: p.z,
+            ry: p.yaw,
+            anim: p.state1 === 0 ? "jump" : p.state0 ? "walk" : "idle"
+        }));
+        for (const p of converted) {
+            if (!remotes.has(p.id)) handle({ type: "join", ...p });
+        }
+        handle({ type: "states", players: converted });
+        return;
+    }
+    const chat = _parseChatPacket(buffer);
+    if (chat) {
+        handle({
+            type: "chat",
+            id: chat.playerId,
+            username: chat.username,
+            msg: chat.message,
+            is_staff: false,
+            is_owner: false,
+            is_booster: false
+        });
+    }
+}
+
+function bridgeSend(payload) {
+    if (!bridgeOpen()) return false;
+    if (!launchInfo) return false;
+    if (hubMode) {
+        ws.send(JSON.stringify(payload));
+    } else if (payload.type === "state") {
+        ws.send(_encodeMovementPacket(payload));
+    } else if (payload.type === "chat") {
+        ws.send(_encodeChatPacket(payload.msg));
+    } else {
+        return false;
+    }
+    return true;
+}
+
 async function connect() {
-    return
-    const res = await fetch(`/api/ws-ticket?game_id=${window.GAME_ID || 0}&fingerprint=${encodeURIComponent(window._fingerprint || '')}`).then(r => r.ok ? r.json() : null);
-    if (!res) { console.log('failed to connect'); setTimeout(connect, 4000); return; }
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${location.host}/ws/play?t=${res.ticket}`);
+    if (connectFinished) return;
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+    if (connectPromise) return connectPromise;
+    connectPromise = connectOnce().finally(() => {
+        connectPromise = null;
+    });
+    return connectPromise;
+}
+
+async function connectOnce() {
+    const cfg = getBridgeConfig();
+    const localRelay = cfg.hubUrl && _isLocalRelayUrl(cfg.hubUrl);
+    if (!cfg.launchToken) {
+        Chat.system("Vortex2+2 multiplayer is offline: missing launch token.");
+        return;
+    }
+
+    try {
+        if (!launchInfo) {
+            launchInfo = await verifyLaunchToken(cfg);
+        }
+    } catch (err) {
+        Chat.system(`Vortex2+2 multiplayer auth failed: ${err.message || err}`);
+        connectFinished = true;
+        return;
+    }
+
+    if (cfg.hubUrl) {
+        hubMode = true;
+        const hubUrl = new URL(cfg.hubUrl);
+        if (!hubUrl.pathname || hubUrl.pathname === "/") hubUrl.pathname = "/ws";
+        hubUrl.searchParams.set("game", String(localRelay ? (cfg.officialGameId || window.GAME_ID || 0) : launchInfo.gameId));
+        try { Chat.system(`Vortex2+2 connecting relay: ${hubUrl.host}`); } catch {}
+        ws = new WebSocket(hubUrl.toString());
+
+        ws.onopen = () => {
+            try { Chat.system("Vortex2+2 relay connected."); } catch {}
+            clearTimeout(ws._retry);
+            _reconnectAttempts = 0;
+            const hello = {
+                type: "hello",
+                id: launchInfo?.id || 0,
+                username: launchInfo?.username || "",
+                gameId: localRelay ? Number(cfg.officialGameId || window.GAME_ID || 0) : launchInfo.gameId,
+                shirt_id: launchInfo?.shirtId || 0,
+                is_staff: false,
+                is_booster: false
+            };
+            if (localRelay) {
+                hello.launchToken = cfg.launchToken;
+                hello.clientToken = launchInfo?.clientToken || "";
+                hello.appToken = launchInfo?.appToken || "";
+            }
+            ws.send(JSON.stringify(hello));
+        };
+
+        ws.onmessage = e => {
+            try {
+                handle(JSON.parse(e.data));
+            } catch (err) {
+                console.warn("[mp] bad hub message", err, e.data);
+            }
+        };
+
+        ws.onclose = () => {
+            stopBroadcast();
+            if (!ws._kicked) {
+                if (_reconnectAttempts >= _MAX_RECONNECTS) return;
+                _reconnectAttempts++;
+                ws._retry = setTimeout(connect, 3000);
+            }
+        };
+
+        ws.onerror = () => {
+            try { Chat.system("Vortex2+2 hub connection failed."); } catch {}
+            ws.close();
+        };
+
+        connectFinished = true;
+        return;
+    }
+
+    handle({
+        type: "init",
+        id: launchInfo.id,
+        username: launchInfo.username,
+        is_staff: false,
+        is_booster: false,
+        shirt_id: launchInfo.shirtId,
+        players: []
+    });
+
+    if (!launchInfo.wsEndpoint) {
+        Chat.system("Vortex2+2 multiplayer is offline: set a browser multiplayer hub URL in the extension popup. The live app no longer exposes a browser WebSocket endpoint, and Chrome extensions cannot connect to UDP/raw TCP game sockets.");
+        connectFinished = true;
+        return;
+    }
+
+    ws = new WebSocket(launchInfo.wsEndpoint);
+    ws.binaryType = "arraybuffer";
 
     ws.onopen = () => {
-        console.log('websocket opened');
         clearTimeout(ws._retry);
         _reconnectAttempts = 0;
-        startBroadcast();
+        if (/^[a-fA-F0-9]{64}$/.test(String(launchInfo.clientToken || ""))) {
+            ws.send(_encodeHeartbeat());
+        }
     };
 
-    ws.onmessage = e => handle(JSON.parse(e.data));
+    ws.onmessage = e => {
+        try {
+            if (e.data instanceof ArrayBuffer) _handleNativePacket(e.data);
+            else if (e.data instanceof Blob) e.data.arrayBuffer().then(_handleNativePacket);
+            else handle(JSON.parse(e.data));
+        } catch (err) {
+            console.warn("[mp] bad multiplayer message", err, e.data);
+        }
+    };
 
     ws.onclose = () => {
-        console.log('websocket closed');
         stopBroadcast();
         if (!ws._kicked) {
             if (_reconnectAttempts >= _MAX_RECONNECTS) return;
@@ -513,7 +960,11 @@ async function connect() {
         }
     };
 
-    ws.onerror = () => { ws.close(); console.log('websocket error') }
+    ws.onerror = () => {
+        try { Chat.system("Vortex2+2 multiplayer websocket connection failed."); } catch {}
+        ws.close();
+    }
+    connectFinished = true;
 }
 
 let specialReplicatedNumber = 0
@@ -524,7 +975,6 @@ function saveBlocks() {
     localStorage.setItem('blocks', stringed);
 }
 function loadBlocks() {
-    console.log('loading saved blocks...')
     let stringed = localStorage.getItem('blocks');
     if (stringed) {
         let savedBlokcs = JSON.parse(stringed);
@@ -536,15 +986,14 @@ function loadBlocks() {
     }
 }
 let encodeFrame = 0;
-function encodeNetworkData(data) { //10 bits total
+function encodeNetworkData(data) {
     let ry = data.ry;
     encodeFrame++;
     if (window.SWORD_FIGHT) {
-        let healthBits = Math.round(Math.min(Math.max(0, playerSpecialValues.health * 15), 15)); //4 bits (0-3)
-        let slicingBits = playerSpecialValues.slicing ? 16 : 0; //1 bit (4-4)
-        //5-8 are currently unused
+        let healthBits = Math.round(Math.min(Math.max(0, playerSpecialValues.health * 15), 15));
+        let slicingBits = playerSpecialValues.slicing ? 16 : 0;
 
-        let syncNormalData = 512; //1 bit (9-9) for now, always use the regular old vortex data.
+        let syncNormalData = 512;
 
         specialReplicatedNumber = healthBits + slicingBits + syncNormalData
 
@@ -613,7 +1062,6 @@ function encodeNetworkData(data) { //10 bits total
 
 const blocks = new Map();
 let canPlace = true;
-//inuk's custom building system!
 function _setBlockState(userid, x, y, z, state) {
     if (!canPlace) return
     if (!validPlacement(x, y, z)) return
@@ -726,8 +1174,6 @@ function decodeNetworkData(playerData, r) {
                 r.meshes.grp.rotation.y = playerData.ry;
                 r.meshes.grp.visible = true;
             }
-        } else {
-            //I'm planning on using the xyz fields to replicate even more data in the future, not sure what tho
         }
     } else if (window.BUILD_MODE) {
         let syncNormalData = (specialState & 512) !== 0;
@@ -780,6 +1226,17 @@ function handle(d) {
 
         case 'init': {
             myId = d.id;
+            if (!launchInfo || launchInfo.localRelayPending) {
+                launchInfo = {
+                    id: d.id,
+                    username: d.username,
+                    gameId: d.game_id || d.gameId || Number(window.GAME_ID || 0),
+                    shirtId: d.shirt_id || 0,
+                    clientToken: "",
+                    appToken: "",
+                    raw: d
+                };
+            }
             Leaderboard.setMyId(myId);
             Leaderboard.addPlayer({ id: myId, username: d.username, is_staff: d.is_staff, is_booster: d.is_booster });
             for (const p of d.players) {
@@ -797,6 +1254,7 @@ function handle(d) {
                     document.onload = loadBlocks;
                 }
             }
+            startBroadcast();
             break;
         }
 
@@ -833,7 +1291,14 @@ function handle(d) {
 
         case 'chat': {
             Chat.message(d.username, d.msg, d.id === myId, d.is_staff, d.is_owner, d.is_booster);
-            _showBubble(d.id, d.msg);
+            if (d.id === myId || remotes.has(d.id)) {
+                _showBubble(d.id, d.msg);
+            } else {
+                const pending = _pendingBubbles.get(d.id) || [];
+                pending.push(String(d.msg || ""));
+                while (pending.length > MAX_BUBBLES) pending.shift();
+                _pendingBubbles.set(d.id, pending);
+            }
             break;
         }
 
@@ -918,7 +1383,7 @@ function addRemote(id, username, is_staff, is_booster, shirtId) {
     const shirtUrl = shirtId ? "/assets/clothing/" + shirtId + ".png" : null;
     let meshes = null;
     if (_vortex.getCharacter()) { try { meshes = makeRemote(username, id, shirtUrl); } catch (e) { console.error('[mp] makeRemote failed:', e); } }
-    if (!meshes) _pendingAvatars.set(id, { username, is_staff: isStaff, is_booster: isBooster, shirt_id: shirtId });
+    if (!meshes) _pendingAvatars.set(id, { username, is_staff, is_booster, shirt_id: shirtId });
 
     remotes.set(id, {
         meshes,
@@ -931,6 +1396,86 @@ function addRemote(id, username, is_staff, is_booster, shirtId) {
     });
     Leaderboard.addPlayer({ id, username, is_staff, is_booster });
     Leaderboard.setFriendStatus(id, _statusFor(id));
+    if (!shirtId) hydrateRemoteShirt(id);
+
+    const pendingBubbles = _pendingBubbles.get(id);
+    if (pendingBubbles?.length) {
+        for (const msg of pendingBubbles) _showBubble(id, msg);
+        _pendingBubbles.delete(id);
+    }
+}
+
+const _remoteShirtCache = new Map();
+const _remoteShirtInflight = new Set();
+
+async function hydrateRemoteShirt(id) {
+    id = Number(id || 0);
+    if (!id || id === myId) return;
+    if (_remoteShirtCache.has(id)) {
+        applyRemoteShirt(id, _remoteShirtCache.get(id));
+        return;
+    }
+    if (_remoteShirtInflight.has(id)) return;
+    _remoteShirtInflight.add(id);
+    try {
+        const res = await fetch(`/api/users/${id}`, { credentials: 'same-origin', cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const shirtId = extractProfileShirtId(data);
+        _remoteShirtCache.set(id, shirtId || 0);
+        if (shirtId) applyRemoteShirt(id, shirtId);
+    } catch (e) {
+    } finally {
+        _remoteShirtInflight.delete(id);
+    }
+}
+
+function extractProfileShirtId(data) {
+    const preferred = [
+        data?.shirt_id,
+        data?.shirtId,
+        data?.clothing_id,
+        data?.clothingId,
+        data?.equipped_shirt_id,
+        data?.equippedShirtId,
+        data?.avatar?.shirt_id,
+        data?.avatar?.shirtId,
+        data?.shirt?.id,
+        data?.clothing?.id,
+    ];
+    for (const value of preferred) {
+        const id = Number(value || 0);
+        if (Number.isInteger(id) && id > 0) return id;
+    }
+
+    const seen = new Set();
+    const stack = [data];
+    while (stack.length) {
+        const item = stack.pop();
+        if (!item || typeof item !== 'object' || seen.has(item)) continue;
+        seen.add(item);
+        for (const [key, value] of Object.entries(item)) {
+            if (value && typeof value === 'object') {
+                stack.push(value);
+                continue;
+            }
+            if (!/(shirt|clothing)/i.test(key)) continue;
+            const id = Number(value || 0);
+            if (Number.isInteger(id) && id > 0 && id < 100000) return id;
+        }
+    }
+    return 0;
+}
+
+function applyRemoteShirt(id, shirtId) {
+    const url = shirtId ? "/assets/clothing/" + shirtId + ".png" : null;
+    const rp = remotes.get(id);
+    if (rp?.meshes) {
+        _vortex.applyShirtToMesh(rp.meshes.shirtMesh, url);
+    } else {
+        const pending = _pendingAvatars.get(id);
+        if (pending) pending.shirt_id = shirtId || 0;
+    }
 }
 
 function removeRemote(id) {
@@ -954,6 +1499,7 @@ function removeRemote(id) {
     }
     disposeRemote(r.meshes);
     _pendingAvatars.delete(id);
+    _pendingBubbles.delete(id);
     remotes.delete(id);
     Leaderboard.removePlayer(id);
 }
@@ -961,7 +1507,7 @@ function removeRemote(id) {
 function startBroadcast() {
     if (broadcastTimer) return;
     broadcastTimer = setInterval(() => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        if (!bridgeOpen()) return;
         const char = _vortex.getCharacter();
         if (!char) return;
 
@@ -984,7 +1530,7 @@ function startBroadcast() {
             anim: anim,
         }
         let encoded = encodeNetworkData(dataToEncode);
-        ws.send(JSON.stringify(encoded));
+        bridgeSend(encoded);
     }, 50);
 }
 
@@ -1007,6 +1553,11 @@ window._mpUpdate = function (dt) {
                 }
 
                 if (r.meshes) r.meshes.grp.visible = false;
+                const pendingBubbles = _pendingBubbles.get(id);
+                if (pendingBubbles?.length) {
+                    for (const msg of pendingBubbles) _showBubble(id, msg);
+                    _pendingBubbles.delete(id);
+                }
             }
         }
         _pendingAvatars.clear();
@@ -1039,8 +1590,7 @@ window._mpUpdate = function (dt) {
 };
 
 window._mpSendChat = function (msg) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'chat', msg }));
+    bridgeSend({ type: 'chat', msg });
 }
 
 window._mpCreateDummy = function (x, y, z, shirtUrl, ry = 0) {
@@ -1053,3 +1603,5 @@ window._mpCreateDummy = function (x, y, z, shirtUrl, ry = 0) {
     if (sm && shirtUrl) _vortex.applyShirtToMesh(sm, shirtUrl);
     return char;
 };
+
+connect();

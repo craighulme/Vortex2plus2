@@ -296,7 +296,7 @@
         system,
         systemPlayer,
         systemRed,
-        clearPlayerMsg: (function(a){}), //idk wtf this function is supposed to do lol
+        clearPlayerMsg: (function(a){}),
         warn,
         open: openChat,
         close: closeChat,

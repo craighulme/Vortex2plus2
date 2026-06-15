@@ -1,1 +1,6 @@
 _metadata/
+config/
+cloudflare-hub/node_modules/
+cloudflare-hub/.wrangler/
+native-relay/node_modules/
+native-relay/*.log

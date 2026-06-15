@@ -5,12 +5,54 @@
   <script src="./popup.js" defer></script>
   <style>
     body {
-      width: 250px;
+      width: 280px;
       height: 400px;
       padding: 10px;
       text-align: center;
       background-color: rgb(24, 24, 24);
       color: #ebebeb;
+      font-family: system-ui, sans-serif;
+    }
+
+    .setting-row {
+      margin: 14px 0;
+      text-align: left;
+    }
+
+    .setting-row label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: #cfcfcf;
+    }
+
+    #hubUrl {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 7px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #111;
+      color: #fff;
+    }
+
+    #localRelayBtn {
+      width: 100%;
+      margin-top: 8px;
+      border: 0;
+      border-radius: 6px;
+      padding: 7px;
+      background: #2f5fbf;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #hubStatus {
+      min-height: 16px;
+      margin-top: 5px;
+      font-size: 11px;
+      color: #9ecbff;
     }
   </style>
 </head>
@@ -33,6 +75,13 @@
             <polyline points="1.5 6 4.5 9 10.5 1"></polyline>
           </symbol>
         </svg>
+      </div>
+
+      <div class="setting-row">
+        <label for="hubUrl">Browser multiplayer hub URL</label>
+        <input id="hubUrl" placeholder="ws://127.0.0.1:27822/ws">
+        <button id="localRelayBtn" type="button">Use local relay</button>
+        <div id="hubStatus"></div>
       </div>
 
       <style>

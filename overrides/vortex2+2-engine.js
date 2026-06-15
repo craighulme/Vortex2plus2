@@ -358,13 +358,13 @@ const chunkMap = new Map();
 const _dummy = new THREE.Object3D();
 const stud_datas = [];
 const objects = [];
-function addStud(sw, sh, sd, color, x, y, z, rx = 0, ry = 0, rz = 0, shape = "Block", transparency = 0, staticMesh = false, canCollide = true) {
+function addStud(sw, sh, sd, color, x, y, z, rx = 0, ry = 0, rz = 0, shape = "Block", transparency = 0, staticMesh = false, canCollide = true, rotationOrder = 'YXZ') {
     const mesh = new THREE.Mesh(
         getCachedGeo(sw, sh, sd, shape),
         getCachedMats(sw, sh, sd, color, shape, transparency)
     );
     const cy = y + sh / 2;
-    mesh.rotation.order = 'YXZ';
+    mesh.rotation.order = rotationOrder || 'YXZ';
     if (shape == "Cylinder") {
         mesh.position.set(x, cy, z);
         mesh.rotation.set(rx, ry, rz + Math.PI * 0.5);
@@ -402,26 +402,21 @@ function addStud(sw, sh, sd, color, x, y, z, rx = 0, ry = 0, rz = 0, shape = "Bl
             colliders.push(b);
             insertToChunks(b);
         } else {
-            ry = ry % 360
-            while (ry > 45) {
-                ry -= 45
-                sx, sz = sz, -sx
-            }
-            b = buildOBB(sw, sh, sd, x, cy, z, rx, ry, rz);
+            b = buildOBB(sw, sh, sd, x, cy, z, rx, ry, rz, mesh.rotation.order);
             colliders.push(b);
             insertToChunks(b);
         }
     }
     const m = staticMesh ? (null) : (mesh);
-    let stud_id = stud_datas.push({ m, b }) - 1;
+    let stud_id = stud_datas.push({ m, b, canCollide, sw, sh, sd, color, shape, transparency }) - 1;
     mesh.stud_id = stud_id;
     if (!staticMesh && canCollide) objects.push(mesh);
     return [mesh, stud_id];
 }
 
 
-function buildOBB(sw, sh, sd, cx, cy, cz, rx, ry, rz) {
-    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz, 'YXZ'));
+function buildOBB(sw, sh, sd, cx, cy, cz, rx, ry, rz, rotationOrder = 'YXZ') {
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz, rotationOrder || 'YXZ'));
     const e = m.elements;
 
     const ux = e[0], uy = e[1], uz = e[2];
@@ -515,6 +510,29 @@ function removeStud(stud_id) {
         }
         stud_datas[stud_id] = null;
     }
+}
+
+function rebuildStudCollider(stud_id, canCollide = true) {
+    const data = stud_datas[stud_id];
+    if (!data || !data.m) return false;
+    if (data.b) {
+        removeCollider(data.b);
+        data.b = null;
+    }
+    data.canCollide = !!canCollide;
+    if (!data.canCollide) return true;
+    data.m.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(data.m);
+    const b = {
+        minX: box.min.x, maxX: box.max.x,
+        minY: box.min.y, maxY: box.max.y,
+        minZ: box.min.z, maxZ: box.max.z,
+    };
+    data.b = b;
+    colliders.push(b);
+    insertToChunks(b);
+    if (!objects.includes(data.m)) objects.push(data.m);
+    return true;
 }
 
 const _nearbySet = new Set();
@@ -2121,6 +2139,9 @@ window._vortex = {
     getCharacter: () => character,
     getGrounded: () => grounded,
     getVelY: () => velY,
+    setVelY(v) { velY = Number(v) || 0; },
+    setGrounded(v) { grounded = !!v; },
+    getMovementConstants: () => ({ WALK_SPEED, JUMP_POWER, GRAVITY }),
     getClimbState: () => climbState,
     getCharFootOffset: () => CHAR_FOOT_OFFSET,
     getCharHeight: () => CHAR_HEIGHT,
@@ -2132,6 +2153,17 @@ window._vortex = {
     },
     requestLock() { renderer.domElement.requestPointerLock(); },
     loadMap: loadMapVortex,
+    addPart(x, y, z, sx = 4, sy = 1, sz = 4, color = 0x4a6fd8, canCollide = true) {
+        const [mesh, id] = addStud(sx, sy, sz, color, x, y - sy * 0.5, z, 0, 0, 0, "Block", 0, false, canCollide);
+        return { mesh, id };
+    },
+    pick: getClicked3DPoint,
+    getObjects: () => objects,
+    getColliders: () => colliders,
+    rebuildStudCollider,
+    removePart(id) {
+        removeStud(id);
+    },
     getCamera: () => camera,
     getCharBubbleBase: () => character ? character.position.y + CHAR_HEIGHT - CHAR_FOOT_OFFSET + 0.4 : 0,
     setSpawn(x, y, z, ry = Math.PI) {
@@ -2160,6 +2192,9 @@ window.fbxLoader = fbxLoader;
 
 window.addStud = addStud;
 window.removeStud = removeStud;
+window.rebuildStudCollider = rebuildStudCollider;
+window.getCachedGeo = getCachedGeo;
+window.getCachedMats = getCachedMats;
 window.removeMatching_array = removeMatching_array;
 
 window.scene = scene;

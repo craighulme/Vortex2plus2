@@ -1,55 +1,57 @@
+const extensionApi = globalThis.chrome || globalThis.browser;
+
 const importedAssets = {
-    stud: chrome.runtime.getURL("img/textures/stud.png"),
-    studNormal: chrome.runtime.getURL("img/textures/studNormal.png"),
+    stud: extensionApi.runtime.getURL("img/textures/stud.png"),
+    studNormal: extensionApi.runtime.getURL("img/textures/studNormal.png"),
 
-    swordMdl: chrome.runtime.getURL("files/meshes/swordMdl.fbx"),
-    playerMdl: chrome.runtime.getURL("files/meshes/player.fbx"),
+    swordMdl: extensionApi.runtime.getURL("files/meshes/swordMdl.fbx"),
+    playerMdl: extensionApi.runtime.getURL("files/meshes/player.fbx"),
 
-    swordSlash: chrome.runtime.getURL("files/sounds/swordSlash.mp3"),
-    placeBlock: chrome.runtime.getURL("files/sounds/placeBlock.mp3"),
-    sfothSong: chrome.runtime.getURL("files/sounds/sfothSong.mp3"),
-    buildSong: chrome.runtime.getURL("files/sounds/buildSong.mp3"),
+    swordSlash: extensionApi.runtime.getURL("files/sounds/swordSlash.mp3"),
+    placeBlock: extensionApi.runtime.getURL("files/sounds/placeBlock.mp3"),
+    sfothSong: extensionApi.runtime.getURL("files/sounds/sfothSong.mp3"),
+    buildSong: extensionApi.runtime.getURL("files/sounds/buildSong.mp3"),
 
-    oofSound: chrome.runtime.getURL("files/sounds/oof.mp3"),
+    oofSound: extensionApi.runtime.getURL("files/sounds/oof.mp3"),
 
     imgdata: {
         banners: {
-            buildingplace: chrome.runtime.getURL("img/games/website/banners/buildingplace.jpeg"),
-            crossroads: chrome.runtime.getURL("img/games/website/banners/crossroads.jpeg"),
-            partyexe: chrome.runtime.getURL("img/games/website/banners/party-exe.webp"),
-            sfoth: chrome.runtime.getURL("img/games/website/banners/sfoth.webp"),
-            swordfightingbaseplate: chrome.runtime.getURL("img/games/website/banners/swordfightingbaseplate.png"),
-            baseplate: chrome.runtime.getURL("img/games/website/banners/baseplate.png"),
-            Glasshouses: chrome.runtime.getURL("img/games/website/banners/Glasshouses.webp"),
-            NDS: chrome.runtime.getURL("img/games/website/banners/NDS.png")
+            buildingplace: extensionApi.runtime.getURL("img/games/website/banners/buildingplace.jpeg"),
+            crossroads: extensionApi.runtime.getURL("img/games/website/banners/crossroads.jpeg"),
+            partyexe: extensionApi.runtime.getURL("img/games/website/banners/party-exe.webp"),
+            sfoth: extensionApi.runtime.getURL("img/games/website/banners/sfoth.webp"),
+            swordfightingbaseplate: extensionApi.runtime.getURL("img/games/website/banners/swordfightingbaseplate.png"),
+            baseplate: extensionApi.runtime.getURL("img/games/website/banners/baseplate.png"),
+            Glasshouses: extensionApi.runtime.getURL("img/games/website/banners/Glasshouses.webp"),
+            NDS: extensionApi.runtime.getURL("img/games/website/banners/NDS.png")
         },
 
         icons: {
-            buildingplace: chrome.runtime.getURL("img/games/website/icons/buildingplace.png"),
-            crossroads: chrome.runtime.getURL("img/games/website/icons/crossroads.png"),
-            partyexe: chrome.runtime.getURL("img/games/website/icons/party-exe.png"),
-            sfoth: chrome.runtime.getURL("img/games/website/icons/sfoth.webp"),
-            swordfightingbaseplate: chrome.runtime.getURL("img/games/website/icons/swordfightingbaseplate.png"),
-            baseplate: chrome.runtime.getURL("img/games/website/icons/baseplate.png"),
-            Glasshouses: chrome.runtime.getURL("img/games/website/icons/Glasshouses.webp"),
-            NDS: chrome.runtime.getURL("img/games/website/icons/NDS.png")
+            buildingplace: extensionApi.runtime.getURL("img/games/website/icons/buildingplace.png"),
+            crossroads: extensionApi.runtime.getURL("img/games/website/icons/crossroads.png"),
+            partyexe: extensionApi.runtime.getURL("img/games/website/icons/party-exe.png"),
+            sfoth: extensionApi.runtime.getURL("img/games/website/icons/sfoth.webp"),
+            swordfightingbaseplate: extensionApi.runtime.getURL("img/games/website/icons/swordfightingbaseplate.png"),
+            baseplate: extensionApi.runtime.getURL("img/games/website/icons/baseplate.png"),
+            Glasshouses: extensionApi.runtime.getURL("img/games/website/icons/Glasshouses.webp"),
+            NDS: extensionApi.runtime.getURL("img/games/website/icons/NDS.png")
         }
     },
     mapdata: {
-        PARTYexe: chrome.runtime.getURL("files/mapdata/PARTY-exe.json"),
-        BuildingPlace: chrome.runtime.getURL("files/mapdata/BuildingPlace.json"),
-        Crossroads: chrome.runtime.getURL("files/mapdata/Crossroads.json"),
-        SFBaseplate: chrome.runtime.getURL("files/mapdata/SFBaseplate.json"),
-        SFOTH: chrome.runtime.getURL("files/mapdata/SFOTH.json"),
-        Baseplate: chrome.runtime.getURL("files/mapdata/Baseplate.json"),
-        Glasshouses: chrome.runtime.getURL("files/mapdata/Glasshouses.json"),
-        NDS: chrome.runtime.getURL("files/mapdata/NDS.json")
+        PARTYexe: extensionApi.runtime.getURL("files/mapdata/PARTY-exe.json"),
+        BuildingPlace: extensionApi.runtime.getURL("files/mapdata/BuildingPlace.json"),
+        Crossroads: extensionApi.runtime.getURL("files/mapdata/Crossroads.json"),
+        SFBaseplate: extensionApi.runtime.getURL("files/mapdata/SFBaseplate.json"),
+        SFOTH: extensionApi.runtime.getURL("files/mapdata/SFOTH.json"),
+        Baseplate: extensionApi.runtime.getURL("files/mapdata/Baseplate.json"),
+        Glasshouses: extensionApi.runtime.getURL("files/mapdata/Glasshouses.json"),
+        NDS: extensionApi.runtime.getURL("files/mapdata/NDS.json")
     }
 };
 
 const overrides = new Map([
     ["three.min.js", "overrides/libs/three.module.js"],
-    ["FBXLoader.js", "overrides/libs/FBXLoader2.js"],
+    ["FBXLoader.js", "overrides/libs/FBXLoader.js"],
     ["inflate.min.js", "overrides/libs/inflate.min.js"],
 
     ["inline_1.js", "overrides/inline_1.js"],
@@ -65,50 +67,76 @@ const overrides = new Map([
     ["multiplayer.js", "overrides/vortex2+2-multiplayer.js"]
 ]);
 
+function runtimeUrl(path) {
+    return extensionApi.runtime.getURL(path);
+}
+
 function replaceUrl(src) {
     if (!src) return null;
     const file = src.split("/").pop();
     const target = overrides.get(file);
     if (!target) return src;
-    return chrome.runtime.getURL(target);
+    return runtimeUrl(target);
+}
+
+function appendMeta(id, content) {
+    const meta = document.createElement("meta");
+    meta.id = id;
+    meta.name = id;
+    meta.content = JSON.stringify(content);
+    document.documentElement.appendChild(meta);
+}
+
+function rewritePlayDocument(html) {
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+
+    for (const link of parsed.querySelectorAll("link[href]")) {
+        const file = link.getAttribute("href").split("/").pop();
+        if (file === "styles.css") link.href = runtimeUrl("overrides/styles.css");
+        if (file === "favicon.ico") link.href = "/favicon.ico";
+    }
+
+    const scripts = [];
+    for (const oldScript of parsed.querySelectorAll("script[src]")) {
+        scripts.push({
+            src: replaceUrl(oldScript.getAttribute("src")),
+            type: oldScript.getAttribute("type") || ""
+        });
+        oldScript.remove();
+    }
+
+    document.documentElement.replaceWith(document.importNode(parsed.documentElement, true));
+
+    appendMeta("_importedAssets", importedAssets);
+    appendMeta("_vortexBridgeConfig", {
+        officialGameId: Number(url.searchParams.get("VortexGameId") || 0),
+        customGameId: url.searchParams.get("V22GameId"),
+        launchToken: url.searchParams.get("V22Token") || "",
+        hubUrl: url.searchParams.get("V22Hub") || ""
+    });
+
+    for (const scriptInfo of scripts) {
+        const script = document.createElement("script");
+        script.src = scriptInfo.src;
+        if (scriptInfo.type) script.type = scriptInfo.type;
+        document.body.appendChild(script);
+    }
 }
 
 var url_string = document.URL;
 var url = new URL(url_string);
 var play = url.searchParams.get("Play");
 if (play) {
-    console.log('play')
-
     async function init() {
         let html = await fetch(
-            chrome.runtime.getURL("overrides/play.html")
+            runtimeUrl("overrides/play.html")
         ).then(r => r.text());
-
-        html = html.replace(
-            /<script\s+[^>]*src=["']([^"']+)["'][^>]*>/g, //crazy
-            (match, src) => {
-                const file = src.split("/").pop();
-                const override = overrides.get(file);
-
-                if (!override) return match;
-
-                const newSrc = chrome.runtime.getURL(override);
-
-                return match.replace(src, newSrc);
-            }
-        );
-
-        document.open();
-        document.write(html);
-        document.close();
-
-        const meta = document.createElement("meta");
-        meta.id = "_importedAssets";
-        meta.name = "_importedAssets";
-        meta.content = JSON.stringify(importedAssets);
-        document.documentElement.appendChild(meta)
+        rewritePlayDocument(html);
     }
-    init();
+    init().catch(err => {
+        console.error("[Vortex2+2] play loader failed", err);
+        document.body.innerHTML = `<pre style="padding:16px;color:#fff;background:#111;white-space:pre-wrap">Vortex2+2 failed to load:\n${String(err && err.stack || err)}</pre>`;
+    });
 } else {
     if (url.searchParams.get("V22GameId")) {
         const warn = document.createElement('div');

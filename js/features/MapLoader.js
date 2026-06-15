@@ -1,33 +1,62 @@
-//Made by inuk
-//this script is responsible for loading custom maps and games
-
 let mapsLoaded = []
 const deg2rad = 0.0174532925;
-function loadMapRaw(name, r, tx=0, ty=1.6, tz=0) {
+function normalizeMapColor(c) {
+    if (Array.isArray(c)) {
+        return (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
+    }
+    if (typeof c === "number") return c;
+    return Number("0x" + String(c || "808080").replace(/^#/, ""));
+}
+
+function loadMapRaw(name, r, tx=0, ty=1.6, tz=0, options = {}) {
     let mapData = typeof r == "string" ? JSON.parse(r) : r;
+    const rotationScale = options.rotationRadians ? 1 : deg2rad;
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let minPX = Infinity, minPY = Infinity, minPZ = Infinity;
+    let maxPX = -Infinity, maxPY = -Infinity, maxPZ = -Infinity;
     for (let i = 0; i < mapData.length; i++) {
         let v = mapData[i]
         const [px, py, pz] = v.P ? v.P : v.Position;
-        minX = Math.min(minX, px); maxX = Math.max(maxX, px);
-        minY = Math.min(minY, py); maxY = Math.max(maxY, py);
-        minZ = Math.min(minZ, pz); maxZ = Math.max(maxZ, pz);
+        const [sx, sy, sz] = v.S ? v.S : v.Size;
+        minPX = Math.min(minPX, px); maxPX = Math.max(maxPX, px);
+        minPY = Math.min(minPY, py); maxPY = Math.max(maxPY, py);
+        minPZ = Math.min(minPZ, pz); maxPZ = Math.max(maxPZ, pz);
+        minX = Math.min(minX, px - sx / 2); maxX = Math.max(maxX, px + sx / 2);
+        minY = Math.min(minY, py - sy / 2); maxY = Math.max(maxY, py + sy / 2);
+        minZ = Math.min(minZ, pz - sz / 2); maxZ = Math.max(maxZ, pz + sz / 2);
     }
-    const ox = tx - (minX + maxX) / 2;
-    const oy = ty - minY;
-    const oz = tz - (minZ + maxZ) / 2;
-    mapsLoaded[name] = {studs:[],meshes:[]}
+    const preserveWorldCoords = !!options.preserveWorldCoords;
+    const ox = preserveWorldCoords ? 0 : tx - (minPX + maxPX) / 2;
+    const oy = preserveWorldCoords ? 0 : ty - minPY;
+    const oz = preserveWorldCoords ? 0 : tz - (minPZ + maxPZ) / 2;
+    const bounds = {
+        minX: minX + ox, maxX: maxX + ox,
+        minY: minY + oy, maxY: maxY + oy,
+        minZ: minZ + oz, maxZ: maxZ + oz,
+        centerX: (minX + maxX) / 2 + ox,
+        centerY: (minY + maxY) / 2 + oy,
+        centerZ: (minZ + maxZ) / 2 + oz,
+    };
+    mapsLoaded[name] = {studs:[],meshes:[],bounds}
     for (let i = 0; i < mapData.length; i++) {
         let v = mapData[i]
-        let s = v.Size ? v.Size : v.S;
-        let p = v.P ? v.P : v.Position;
-        let r = v.R ? v.R : v.Rotation;
-        let c = v.C ? v.C : v.Color;
-        let transp = v.Tr ? v.Tr : v.Transparency;
-        let sh = v.Sh ? v.Sh : v.Shape;
+        let s = v.Size ?? v.S;
+        let p = v.P ?? v.Position;
+        let r = v.R ?? v.Rotation ?? [0, 0, 0];
+        let c = v.C ?? v.Color ?? "808080";
+        let transp = v.Tr ?? v.Transparency ?? 0;
+        let sh = v.Sh || v.Shape || "Block";
         let canCollide = !v.CantCollide;
-        let [mesh, stud_id] = addStud(s[0], s[1], s[2], Number('0x' + c), p[0] + ox, p[1] - s[1] * 0.5 + oy, p[2] + oz, r[0] * deg2rad, r[1] * deg2rad, r[2] * deg2rad, sh, transp, true, canCollide)
+        const rx = r[0] * rotationScale;
+        const ry = r[1] * rotationScale;
+        const rz = r[2] * rotationScale;
+        let [mesh, stud_id] = addStud(s[0], s[1], s[2], normalizeMapColor(c), p[0] + ox, p[1] - s[1] * 0.5 + oy, p[2] + oz, rx, ry, rz, sh, transp, true, canCollide, options.rotationOrder)
+        if (options.rotationOrder && mesh.rotation.order !== options.rotationOrder) {
+            mesh.rotation.order = options.rotationOrder;
+            mesh.rotation.set(rx, ry, rz);
+            mesh.updateMatrix();
+        }
         mapsLoaded[name].studs.push(stud_id);
         mapsLoaded[name].meshes.push(mesh);
     }
@@ -57,27 +86,71 @@ function loadMapRaw(name, r, tx=0, ty=1.6, tz=0) {
         objects.push(mergedMesh);
         mapsLoaded[name].meshes=[...mapsLoaded[name].meshes,mergedMesh];
     })
-    mapsLoaded[name].translation = [ox+tx,oy+ty,oz+tz];
+    mapsLoaded[name].translation = preserveWorldCoords ? [0, 0, 0] : [ox+tx,oy+ty,oz+tz];
+    return mapsLoaded[name];
 }
-async function loadMapUrl(name, url, tx=0, ty=1.6, tz=0) {
-    console.log("Loading map from url:", name, url);
+async function loadMapUrl(name, url, tx=0, ty=1.6, tz=0, options = {}) {
     if (!url) return
     let f = await fetch(url)
     let mapData = await f.json()
-    loadMapRaw(name,mapData,tx,ty,tz);
+    return loadMapRaw(name,mapData,tx,ty,tz,options);
 }
 
 async function loadMapData(name, asset, tx=0, ty=1.6, tz=0) {
-    console.log("Loading map:", name, asset);
     let f = await fetch(importedAssets.mapdata[asset])
     let r = await f.text()
     let mapData = JSON.parse(r)
-    loadMapRaw(name,mapData,tx,ty,tz);
+    return loadMapRaw(name,mapData,tx,ty,tz);
+}
+
+async function loadOfficialVortexMap(gameId) {
+    const name = `Official Vortex ${gameId}`;
+    const res = await fetch(`/api/maps/${encodeURIComponent(gameId)}`, {
+        credentials: "include",
+        cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`official map fetch failed: HTTP ${res.status}`);
+    const mapData = await res.json();
+    const rotationRadians = officialMapUsesRadians(mapData);
+    const loaded = loadMapRaw(name, mapData, 0, 0, 0, {
+        preserveWorldCoords: true,
+        rotationRadians,
+        rotationOrder: "XYZ",
+    });
+    const b = loaded.bounds;
+    const spawn = {
+        x: b.centerX,
+        y: b.maxY + 8,
+        z: b.centerZ,
+    };
+    window.map = {
+        name,
+        officialGameId: gameId,
+        spawnPoints: [[spawn.x, spawn.y, spawn.z]],
+    };
+    window._vortex.setSpawn(spawn.x, spawn.y, spawn.z, 0);
+    console.info(`loaded official Vortex map ${gameId}`, {
+        parts: mapData.length,
+        bounds: b,
+        spawn,
+        rotationRadians,
+    });
+    return loaded;
+}
+
+function officialMapUsesRadians(mapData) {
+    for (const part of mapData) {
+        const r = part.R ?? part.Rotation;
+        if (!Array.isArray(r)) continue;
+        for (const value of r) {
+            if (Math.abs(Number(value) || 0) > Math.PI * 2 + 0.001) return false;
+        }
+    }
+    return true;
 }
 
 function unloadMap(name) {
     if (mapsLoaded[name]) {
-        console.log('unloading')
         for (let i = 0; i < mapsLoaded[name].studs.length; i++) {
             let stud_id = mapsLoaded[name].studs[i]
             removeStud(stud_id);
@@ -106,7 +179,7 @@ const maps = [
         SWORD_FIGHT: true,
 
         REMOVE_BASEPLATE: true,
-    }, //added by Inuk, 6/5/2026, added a ramp to enter the map more easily
+    },
 
     {
         name: "Sword Fights on the Heights",
@@ -126,7 +199,7 @@ const maps = [
         VOID_DIE: true,
 
         REMOVE_BASEPLATE: true,
-    }, //added by Inuk, 9/5/2026
+    },
 
     {
         name: "Sword pvp baseplate",
@@ -145,7 +218,7 @@ const maps = [
         SWORD_FIGHT: true,
 
         REMOVE_BASEPLATE: true,
-    }, //added by Inuk, 10/5/2026
+    },
 
     {
         name: "Vortex2+2 Building game",
@@ -159,12 +232,11 @@ const maps = [
 
         spawnPoints: [[10, 10, 10], [-10, 10, 10], [10, 10, -10], [-10, 10, -10]],
 
-        //skyColor: 0xA00000,
 
         BUILD_MODE: true,
 
         REMOVE_BASEPLATE: true,
-    }, //added by Inuk, 10/5/2026
+    },
 
     {
         name: "Glass Houses",
@@ -249,6 +321,7 @@ window.chooseSpawnPoint = chooseSpawnPoint;
     var url_string = document.URL;
     var url = new URL(url_string);
     var gamei = url.searchParams.get("V22GameId");
+    var officialGameId = parseInt(url.searchParams.get("VortexGameId") || "0", 10);
     if (gamei) {
         let map = maps[gamei]
         window.map = map;
@@ -271,11 +344,23 @@ window.chooseSpawnPoint = chooseSpawnPoint;
             writable: false,
             configurable: false
         });
-        console.log(`game id set to ${gameid}`);;
+        console.info(`game id set to ${gameid}`);
+    } else if (officialGameId > 0) {
+        window.map = {
+            name: `Official Vortex ${officialGameId}`,
+            officialGameId,
+            spawnPoints: [[0, 10, 0]],
+        };
+        Object.defineProperty(window, "GAME_ID", {
+            value: officialGameId,
+            writable: false,
+            configurable: false
+        });
+        console.info(`official game id set to ${officialGameId}`);
     } else {
         window.map = false;
     }
-    console.log('set window map data')
+    console.info('set window map data')
 })();
 
 async function importMapAssets() {
@@ -305,12 +390,9 @@ async function initialize() {
     var play = url.searchParams.get("Play");
     await importMapAssets();
     if (document.location.pathname == '/home' || document.location.pathname == '/social' || document.location.pathname == '/search' || document.location.pathname == '/games/2') {
-        console.log('setting up game buttons')
-        // game buttons!
         let f = await fetch('/api/game-stats')
         let gameStats = await f.json()
         async function waitForGamesLoaded() {
-            console.log('waiting')
             if (document.getElementById('games-grid').children.length > 0) {
                 for (let i = 0; i < maps.length; i++) {
                     let map = maps[i]
@@ -389,7 +471,6 @@ async function initialize() {
                 if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
                 return String(n);
             }
-            console.log('hi')
             const page = document.getElementById('page');
             let txt = `
                         <div class="game-banner">
@@ -432,6 +513,7 @@ async function initialize() {
         var url_string = document.URL;
         var url = new URL(url_string);
         var gamei = url.searchParams.get("V22GameId");
+        var officialGameId = parseInt(url.searchParams.get("VortexGameId") || "0", 10);
         let tmap
         if (gamei) {
             tmap = maps[gamei]
@@ -456,9 +538,24 @@ async function initialize() {
                     ambient.color = new THREE.Color(tmap.skyColor);
                 }
             }
+        } else if (officialGameId > 0) {
+            try {
+                await loadOfficialVortexMap(officialGameId);
+            } catch (err) {
+                console.warn(`Failed to load official Vortex map ${officialGameId}`, err);
+                if (typeof Chat !== "undefined") {
+                    Chat.system(`Could not load official map ${officialGameId}; using fallback baseplate.`);
+                }
+                const ground = new THREE.Mesh(
+                    getCachedGeo(320, 3.2, 320),
+                    getCachedMats(320, 3.2, 320, 0x4db84b)
+                );
+                ground.receiveShadow = true;
+                scene.add(ground);
+                window._vortex.setSpawn(0, 10, 0, 0);
+            }
         }
 
-        // gui stuff
         const panel = document.createElement('div');
         panel.id = "maps-loader-panel";
 
@@ -477,7 +574,6 @@ async function initialize() {
             gap: "8px"
         });
 
-        // title
         const title = document.createElement('div');
         title.textContent = "Vortex 2+2 Maps";
         Object.assign(title.style, {
@@ -489,7 +585,6 @@ async function initialize() {
         });
         panel.appendChild(title);
 
-        // button styler
         function styleBtn(btn, type = "default") {
             Object.assign(btn.style, {
                 padding: "6px 10px",
@@ -513,7 +608,6 @@ async function initialize() {
         }
         let collapsibles = {};
         let ci = 0;
-        // map buttons!!
         maps.forEach(map => {
             const btn = document.createElement('button');
             btn.innerHTML = map.name + '(Not loaded)';
@@ -553,7 +647,6 @@ async function initialize() {
             panel.appendChild(btn);
         });
 
-        // custom url loader
         const input = document.createElement('input');
         input.placeholder = "Custom URL...";
         Object.assign(input.style, {
@@ -570,7 +663,6 @@ async function initialize() {
 
         panel.appendChild(input);
 
-        // custom url loader button
         const loadBtn = document.createElement('button');
         loadBtn.textContent = "Load URL/JSON";
         collapsibles[ci] = loadBtn;
@@ -608,16 +700,15 @@ async function initialize() {
             collapsibles[i].style.display = 'none'
         }
 
-        // finally, add the gui to the page
         document.body.appendChild(panel);
     }
 }
 
-window.onload = () => {
-    console.log('initializing map loader');
+function bootMapLoader() {
+    if (window.__v22MapLoaderBooted) return;
+    window.__v22MapLoaderBooted = true;
+    console.info('initializing map loader');
     initialize()
-
-    if (typeof connect != 'undefined') connect()
 
     let watermark = document.createElement('a')
     watermark.innerHTML = 'Vortex2+2 v0.4.0 by @inuk'
@@ -637,4 +728,10 @@ window.onload = () => {
     vortexsecondary.className = 'navbar-logo navbar-logo-secondary'
     vortexsecondary.innerHTML = ' 2+2'
     vortexprimary.appendChild(vortexsecondary)
+}
+
+if (document.readyState === "loading") {
+    window.addEventListener("load", bootMapLoader, { once: true });
+} else {
+    bootMapLoader();
 }
