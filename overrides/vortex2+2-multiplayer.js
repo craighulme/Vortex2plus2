@@ -616,6 +616,10 @@ async function verifyLaunchToken(cfg) {
         username: _strField(raw, ["username", "name", "display_name", "displayName"], "BrowserPlayer"),
         gameId: _numField(raw, ["game_id", "gameId", "game"], Number(cfg.officialGameId || window.GAME_ID || 0)),
         shirtId: _numField(raw, ["shirt_id", "shirtId", "clothing_id", "clothingId"], 0),
+        pantId: _numField(raw, ["pant_id", "pantId"], 0),
+        bodyType: _strField(raw, ["body_type", "bodyType"], "male"),
+        bodyColors: Array.isArray(raw?.body_colors) ? raw.body_colors : (Array.isArray(raw?.bodyColors) ? raw.bodyColors : []),
+        faceId: _numField(raw, ["face_id", "faceId"], 0),
         clientToken: _strField(raw, ["client_token", "clientToken", "token"], cfg.launchToken),
         appToken: _strField(raw, ["app_token", "appToken"], ""),
         requestedClientToken,
@@ -669,7 +673,9 @@ function _parseMovementRecord(buffer, offset, hasPacketType) {
 
 function _readPacketShirtId(view, foff) {
     let shirtId = 0;
-    if (foff + 27 <= view.byteLength && view.getUint8(foff + 22) === 1) {
+    if (foff + 55 <= view.byteLength) {
+        shirtId = view.getUint8(foff + 22);
+    } else if (foff + 27 <= view.byteLength && view.getUint8(foff + 22) === 1) {
         shirtId = view.getUint32(foff + 23, true);
     } else if (foff + 26 <= view.byteLength) {
         shirtId = view.getUint32(foff + 22, true);
@@ -728,9 +734,24 @@ function _writeU64(view, off, value) {
     view.setBigUint64(off, BigInt(Math.max(0, Math.floor(value || 0))), true);
 }
 
+function _safeBodyColors(value) {
+    const input = Array.isArray(value) ? value : [];
+    const out = [];
+    for (let i = 0; i < 6; i++) {
+        const color = String(input[i] || "#ffffff").trim();
+        out.push(/^#?[0-9a-f]{6}$/i.test(color) ? (color.startsWith("#") ? color : `#${color}`) : "#ffffff");
+    }
+    return out;
+}
+
+function _packetColorInt(color) {
+    const match = String(color || "").match(/^#?([0-9a-f]{6})$/i);
+    return match ? parseInt(match[1], 16) : 0xffffff;
+}
+
 function _encodeMovementPacket(data) {
     const nameBytes = new TextEncoder().encode(launchInfo.username);
-    const len = 4 + 8 + 8 + 8 + nameBytes.length + 1 + 4 + 4 + 4 + 4 + 1 + 1 + 4 + 1 + 4;
+    const len = 4 + 8 + 8 + 8 + nameBytes.length + 1 + 4 + 4 + 4 + 4 + 1 + 1 + 4 + 33;
     const buffer = new ArrayBuffer(len);
     const view = new DataView(buffer);
     let off = 0;
@@ -749,8 +770,17 @@ function _encodeMovementPacket(data) {
     view.setUint8(off, anim === "jump" ? 0 : 1); off += 1;
     animClock += 0.05;
     view.setFloat32(off, animClock, true); off += 4;
-    view.setUint8(off, 1); off += 1;
-    view.setUint32(off, launchInfo.shirtId || 0, true);
+    view.setUint8(off, (launchInfo.shirtId || 0) & 0xff); off += 1;
+    view.setUint8(off, (launchInfo.pantId || 0) & 0xff); off += 1;
+    view.setUint8(off, 0); off += 1;
+    const colors = _safeBodyColors(launchInfo.bodyColors);
+    for (let i = 0; i < 6; i++) {
+        view.setUint32(off, _packetColorInt(colors[i]), true);
+        off += 4;
+    }
+    view.setUint8(off, String(launchInfo.bodyType || "male").toLowerCase() === "female" ? 2 : 1); off += 1;
+    view.setUint32(off, launchInfo.faceId || 0, true); off += 4;
+    view.setUint8(off, 0);
     return buffer;
 }
 
@@ -759,7 +789,7 @@ function _encodeHeartbeat() {
     const bytes = new TextEncoder().encode(token);
     const buffer = new ArrayBuffer(12 + bytes.length);
     const view = new DataView(buffer);
-    view.setUint32(0, 4, true);
+    view.setUint32(0, 6, true);
     _writeU64(view, 4, bytes.length);
     new Uint8Array(buffer, 12, bytes.length).set(bytes);
     return buffer;
@@ -877,6 +907,10 @@ async function connectOnce() {
                 username: launchInfo?.username || "",
                 gameId: localRelay ? Number(cfg.officialGameId || window.GAME_ID || 0) : launchInfo.gameId,
                 shirt_id: launchInfo?.shirtId || 0,
+                pant_id: launchInfo?.pantId || 0,
+                body_type: launchInfo?.bodyType || "male",
+                body_colors: launchInfo?.bodyColors || [],
+                face_id: launchInfo?.faceId || 0,
                 is_staff: false,
                 is_booster: false
             };

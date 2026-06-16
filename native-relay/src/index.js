@@ -6,6 +6,7 @@ const listenHost = process.env.V22_RELAY_HOST || "127.0.0.1";
 const listenPort = Number(process.env.V22_RELAY_PORT || 27822);
 const nativeHost = process.env.VORTEX_NATIVE_HOST || "connect.playvortex.io";
 const nativePort = Number(process.env.VORTEX_NATIVE_PORT || 7777);
+const heartbeatType = Number(process.env.V22_HEARTBEAT_TYPE || 6);
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -13,6 +14,7 @@ const wss = new WebSocketServer({ host: listenHost, port: listenPort });
 
 console.log(`[native-relay] listening ws://${listenHost}:${listenPort}/ws`);
 console.log(`[native-relay] native UDP ${nativeHost}:${nativePort}`);
+console.log(`[native-relay] heartbeat packet type=${heartbeatType}`);
 
 wss.on("connection", (ws, req) => {
   const url = new URL(req.url || "/ws", `ws://${req.headers.host || `${listenHost}:${listenPort}`}`);
@@ -100,6 +102,10 @@ class NativeSession {
       username: safeName(identity.username),
       gameId: safeInt(identity.gameId) || this.requestedGame,
       shirtId: safeInt(identity.shirtId),
+      pantId: safeInt(identity.pantId),
+      bodyType: safeBodyType(identity.bodyType),
+      bodyColors: safeBodyColors(identity.bodyColors),
+      faceId: safeInt(identity.faceId),
     };
 
     if (!this.player.id || !this.player.gameId) {
@@ -117,6 +123,10 @@ class NativeSession {
       is_staff: false,
       is_booster: false,
       shirt_id: this.player.shirtId || 0,
+      pant_id: this.player.pantId || 0,
+      body_type: this.player.bodyType,
+      body_colors: this.player.bodyColors,
+      face_id: this.player.faceId || 0,
       players: [],
     });
 
@@ -291,6 +301,10 @@ async function verifyLaunchToken(launchToken) {
       username: raw.username || raw.name || "",
       gameId: raw.game_id || raw.gameId || raw.game || 0,
       shirtId: raw.shirt_id || raw.shirtId || 0,
+      pantId: raw.pant_id || raw.pantId || 0,
+      bodyType: raw.body_type || raw.bodyType || "male",
+      bodyColors: raw.body_colors || raw.bodyColors || [],
+      faceId: raw.face_id || raw.faceId || 0,
     };
   } catch (err) {
     console.warn(`[native-relay] verify-launch failed: ${err?.message || err}`);
@@ -306,6 +320,10 @@ function hasBrowserIdentity(hello) {
     username: safeName(hello.username),
     gameId: safeInt(hello.gameId),
     shirtId: safeInt(hello.shirt_id || hello.shirtId),
+    pantId: safeInt(hello.pant_id || hello.pantId),
+    bodyType: safeBodyType(hello.body_type || hello.bodyType),
+    bodyColors: safeBodyColors(hello.body_colors || hello.bodyColors),
+    faceId: safeInt(hello.face_id || hello.faceId),
   };
 }
 
@@ -335,7 +353,7 @@ function chooseAuthTokens(hello, verified) {
 function encodeHeartbeat(token) {
   const bytes = encoder.encode(token.slice(0, 64));
   const buf = Buffer.alloc(12 + bytes.length);
-  buf.writeUInt32LE(6, 0);
+  buf.writeUInt32LE(heartbeatType, 0);
   writeU64(buf, 4, bytes.length);
   Buffer.from(bytes).copy(buf, 12);
   return buf;
@@ -343,7 +361,7 @@ function encodeHeartbeat(token) {
 
 function encodeMovement(player, data, animClock) {
   const nameBytes = encoder.encode(player.username);
-  const buf = Buffer.alloc(4 + 8 + 8 + 8 + nameBytes.length + 1 + 16 + 2 + 4 + 1 + 4);
+  const buf = Buffer.alloc(4 + 8 + 8 + 8 + nameBytes.length + 1 + 16 + 2 + 4 + 33);
   let off = 0;
   buf.writeUInt32LE(0, off); off += 4;
   writeU64(buf, off, player.id); off += 8;
@@ -360,8 +378,17 @@ function encodeMovement(player, data, animClock) {
   buf.writeUInt8(anim === "idle" ? 0 : 1, off); off += 1;
   buf.writeUInt8(anim === "jump" ? 0 : 1, off); off += 1;
   buf.writeFloatLE(animClock, off); off += 4;
-  buf.writeUInt8(1, off); off += 1;
-  buf.writeUInt32LE(player.shirtId || 0, off);
+  buf.writeUInt8((player.shirtId || 0) & 0xff, off); off += 1;
+  buf.writeUInt8((player.pantId || 0) & 0xff, off); off += 1;
+  buf.writeUInt8(0, off); off += 1;
+  const colors = safeBodyColors(player.bodyColors);
+  for (let i = 0; i < 6; i += 1) {
+    buf.writeUInt32LE(colorToPacketInt(colors[i]), off);
+    off += 4;
+  }
+  buf.writeUInt8(player.bodyType === "female" ? 2 : 1, off); off += 1;
+  buf.writeUInt32LE(player.faceId || 0, off); off += 4;
+  buf.writeUInt8(0, off);
   return buf;
 }
 
@@ -460,12 +487,33 @@ function parseMovementRecord(buf, offset, hasPacketType) {
 
 function readShirtId(buf, foff) {
   let shirtId = 0;
-  if (foff + 27 <= buf.length && buf.readUInt8(foff + 22) === 1) {
+  if (foff + 55 <= buf.length) {
+    shirtId = buf.readUInt8(foff + 22);
+  } else if (foff + 27 <= buf.length && buf.readUInt8(foff + 22) === 1) {
     shirtId = buf.readUInt32LE(foff + 23);
   } else if (foff + 26 <= buf.length) {
     shirtId = buf.readUInt32LE(foff + 22);
   }
   return shirtId > 0 && shirtId < 1000 ? shirtId : 0;
+}
+
+function safeBodyType(value) {
+  return String(value || "male").toLowerCase() === "female" ? "female" : "male";
+}
+
+function safeBodyColors(value) {
+  const input = Array.isArray(value) ? value : [];
+  const out = [];
+  for (let i = 0; i < 6; i += 1) {
+    const color = String(input[i] || "#ffffff").trim();
+    out.push(/^#?[0-9a-f]{6}$/i.test(color) ? (color.startsWith("#") ? color : `#${color}`) : "#ffffff");
+  }
+  return out;
+}
+
+function colorToPacketInt(color) {
+  const match = String(color || "").match(/^#?([0-9a-f]{6})$/i);
+  return match ? parseInt(match[1], 16) : 0xffffff;
 }
 
 function findNextRecord(buf, off, rec) {
