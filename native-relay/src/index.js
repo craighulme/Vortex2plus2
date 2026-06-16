@@ -40,6 +40,8 @@ class NativeSession {
     this.statsTimer = null;
     this.bootstrapTimer = null;
     this.joined = new Set();
+    this.remoteNames = new Map();
+    this.missingCounts = new Map();
     this.recvPackets = 0;
     this.sendPackets = 0;
     this.lastAnimClock = 0;
@@ -197,6 +199,7 @@ class NativeSession {
 
     const players = parsePlayersPacket(buf);
     if (players) {
+      const present = new Set();
       const states = players
         .filter((p) => p.id !== this.player?.id)
         .map((p) => ({
@@ -213,10 +216,28 @@ class NativeSession {
         }));
 
       for (const p of states) {
+        present.add(p.id);
+        this.remoteNames.set(p.id, p.username);
+        this.missingCounts.set(p.id, 0);
         if (!this.joined.has(p.id)) {
           this.joined.add(p.id);
           console.log(`[native-relay] player ${p.username} #${p.id}`);
           this.sendBrowser({ type: "join", ...p });
+        }
+      }
+
+      for (const id of [...this.joined]) {
+        if (present.has(id)) continue;
+        const missing = (this.missingCounts.get(id) || 0) + 1;
+        if (missing >= 20) {
+          const username = this.remoteNames.get(id) || `#${id}`;
+          this.joined.delete(id);
+          this.remoteNames.delete(id);
+          this.missingCounts.delete(id);
+          console.log(`[native-relay] player left ${username} #${id}`);
+          this.sendBrowser({ type: "leave", id, username });
+        } else {
+          this.missingCounts.set(id, missing);
         }
       }
 
@@ -235,6 +256,12 @@ class NativeSession {
         is_owner: false,
         is_booster: false,
       });
+      return;
+    }
+
+    const notice = parseSystemPacket(buf);
+    if (notice) {
+      this.sendBrowser(classifySystemMessage(notice.message));
     }
   }
 
@@ -439,7 +466,7 @@ function parseMovementRecord(buf, offset, hasPacketType) {
   if (nameOff + nameLen > buf.length) return null;
 
   const name = decoder.decode(buf.subarray(nameOff, nameOff + nameLen));
-  if (!asciiOk(name)) return null;
+  if (!textOk(name)) return null;
 
   const firstFloat = nameOff + nameLen;
   const offsets = [firstFloat + 1, firstFloat, firstFloat + 2];
@@ -535,7 +562,7 @@ function parseChatPacket(buf) {
   let off = 20;
   if (off + nameLen + 8 > buf.length) return null;
   const username = decoder.decode(buf.subarray(off, off + nameLen));
-  if (!asciiOk(username)) return null;
+  if (!textOk(username)) return null;
 
   off += nameLen;
   const msgLen = readU64(buf, off);
@@ -544,9 +571,32 @@ function parseChatPacket(buf) {
   off += 8;
   if (off + msgLen > buf.length) return null;
   const message = decoder.decode(buf.subarray(off, off + msgLen));
-  if (!asciiOk(message)) return null;
+  if (!textOk(message)) return null;
 
   return { playerId, username, message };
+}
+
+function parseSystemPacket(buf) {
+  if (buf.length < 12 || buf.readUInt32LE(0) !== 5) return null;
+  const msgLen = readU64(buf, 4);
+  if (!msgLen || msgLen > 1024 || 12 + msgLen > buf.length) return null;
+  const message = decoder.decode(buf.subarray(12, 12 + msgLen));
+  return textOk(message) ? { message } : null;
+}
+
+function classifySystemMessage(message) {
+  const text = String(message || "");
+  if (/wait|slow down|too fast|rate limit|throttle/i.test(text)) {
+    const wait = Number(text.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|second)/i)?.[1] || 0);
+    return { type: "chat_throttled", wait: wait || "a moment" };
+  }
+  if (/blocked|filtered|not allowed|inappropriate|moderation/i.test(text)) {
+    return { type: "chat_blocked", msg: text };
+  }
+  if (/kick|ban|disconnect|already playing|another window/i.test(text)) {
+    return { type: "system_red", msg: text };
+  }
+  return { type: "system", msg: text };
 }
 
 function writeU64(buf, off, value) {
@@ -569,9 +619,9 @@ function safeName(value) {
   return String(value || "BrowserPlayer").replace(/[^\x20-\x7e]/g, "").slice(0, 32) || "BrowserPlayer";
 }
 
-function asciiOk(text) {
+function textOk(text) {
   return !!text && [...text].every((c) => {
-    const n = c.charCodeAt(0);
-    return n >= 32 && n <= 126;
+    const n = c.codePointAt(0);
+    return n === 9 || n === 10 || n === 13 || (n >= 32 && n !== 0x7f);
   });
 }

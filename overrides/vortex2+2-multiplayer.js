@@ -545,10 +545,10 @@ function _u32(view, off) {
     return off + 4 <= view.byteLength ? view.getUint32(off, true) : null;
 }
 
-function _asciiOk(text) {
+function _textOk(text) {
     return !!text && [...text].every(c => {
-        const n = c.charCodeAt(0);
-        return n >= 32 && n <= 126;
+        const n = c.codePointAt(0);
+        return n === 9 || n === 10 || n === 13 || (n >= 32 && n !== 0x7f);
     });
 }
 
@@ -641,7 +641,7 @@ function _parseMovementRecord(buffer, offset, hasPacketType) {
     if (nameOff + nameLen > view.byteLength) return null;
     const bytes = new Uint8Array(buffer, offset + nameOff, nameLen);
     const name = new TextDecoder().decode(bytes);
-    if (!_asciiOk(name)) return null;
+    if (!_textOk(name)) return null;
 
     const foffNoNul = nameOff + nameLen;
     const offsets = [foffNoNul + 1, foffNoNul, foffNoNul + 2];
@@ -719,15 +719,39 @@ function _parseChatPacket(buffer) {
     let off = 20;
     if (off + nameLen + 8 > buffer.byteLength) return null;
     const username = new TextDecoder().decode(new Uint8Array(buffer, off, nameLen));
-    if (!_asciiOk(username)) return null;
+    if (!_textOk(username)) return null;
     off += nameLen;
     const msgLen = _u64(view, off);
     if (!msgLen || msgLen > 512) return null;
     off += 8;
     if (off + msgLen > buffer.byteLength) return null;
     const message = new TextDecoder().decode(new Uint8Array(buffer, off, msgLen));
-    if (!_asciiOk(message)) return null;
+    if (!_textOk(message)) return null;
     return { playerId, username, message };
+}
+
+function _parseSystemPacket(buffer) {
+    const view = new DataView(buffer);
+    if (_u32(view, 0) !== 5) return null;
+    const msgLen = _u64(view, 4);
+    if (!msgLen || msgLen > 1024 || 12 + msgLen > buffer.byteLength) return null;
+    const message = new TextDecoder().decode(new Uint8Array(buffer, 12, msgLen));
+    return _textOk(message) ? { message } : null;
+}
+
+function _classifySystemMessage(message) {
+    const text = String(message || "");
+    if (/wait|slow down|too fast|rate limit|throttle/i.test(text)) {
+        const wait = Number(text.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|second)/i)?.[1] || 0);
+        return { type: "chat_throttled", wait: wait || "a moment" };
+    }
+    if (/blocked|filtered|not allowed|inappropriate|moderation/i.test(text)) {
+        return { type: "chat_blocked", msg: text };
+    }
+    if (/kick|ban|disconnect|already playing|another window/i.test(text)) {
+        return { type: "system_red", msg: text };
+    }
+    return { type: "system", msg: text };
 }
 
 function _writeU64(view, off, value) {
@@ -843,6 +867,11 @@ function _handleNativePacket(buffer) {
             is_owner: false,
             is_booster: false
         });
+        return;
+    }
+    const notice = _parseSystemPacket(buffer);
+    if (notice) {
+        handle(_classifySystemMessage(notice.message));
     }
 }
 
@@ -1353,6 +1382,11 @@ function handle(d) {
 
         case "system": {
             Chat.system(d.msg);
+            break;
+        }
+
+        case "system_red": {
+            Chat.systemRed(d.msg);
             break;
         }
 
