@@ -7,6 +7,7 @@ const listenPort = Number(process.env.V22_RELAY_PORT || 27822);
 const nativeHost = process.env.VORTEX_NATIVE_HOST || "connect.playvortex.io";
 const nativePort = Number(process.env.VORTEX_NATIVE_PORT || 7777);
 const heartbeatType = Number(process.env.V22_HEARTBEAT_TYPE || 6);
+const nativeLeaveGraceMs = Number(process.env.V22_NATIVE_LEAVE_GRACE_MS || 5000);
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -42,6 +43,7 @@ class NativeSession {
     this.joined = new Set();
     this.remoteNames = new Map();
     this.missingCounts = new Map();
+    this.lastSeenAt = new Map();
     this.recvPackets = 0;
     this.sendPackets = 0;
     this.lastAnimClock = 0;
@@ -228,6 +230,7 @@ class NativeSession {
         present.add(p.id);
         this.remoteNames.set(p.id, p.username);
         this.missingCounts.set(p.id, 0);
+        this.lastSeenAt.set(p.id, Date.now());
         if (!this.joined.has(p.id)) {
           this.joined.add(p.id);
           console.log(`[native-relay] player ${p.username} #${p.id}`);
@@ -238,11 +241,13 @@ class NativeSession {
       for (const id of [...this.joined]) {
         if (present.has(id)) continue;
         const missing = (this.missingCounts.get(id) || 0) + 1;
-        if (missing >= 20) {
+        const lastSeenAt = this.lastSeenAt.get(id) || 0;
+        if (missing >= 20 && Date.now() - lastSeenAt >= nativeLeaveGraceMs) {
           const username = this.remoteNames.get(id) || `#${id}`;
           this.joined.delete(id);
           this.remoteNames.delete(id);
           this.missingCounts.delete(id);
+          this.lastSeenAt.delete(id);
           console.log(`[native-relay] player left ${username} #${id}`);
           this.sendBrowser({ type: "leave", id, username });
         } else {

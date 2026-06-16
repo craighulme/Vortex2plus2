@@ -731,6 +731,11 @@ let _avatarState = {
     face_id: 0
 };
 const _clothingImageCache = new Map();
+const _clothingImageInflight = new Map();
+const _clothingImageQueue = new Set();
+let _clothingImageTimer = null;
+const CLOTHING_IMAGE_TTL_MS = 5 * 60 * 1000;
+const CLOTHING_IMAGE_RETRY_MS = 30 * 1000;
 
 const fbxLoader = new THREE.FBXLoader();
 const gltfLoader = new THREE.GLTFLoader();
@@ -771,17 +776,114 @@ function _legacyClothingUrl(id) {
 async function _modernClothingUrl(id) {
     id = Number(id || 0);
     if (!id) return null;
-    if (_clothingImageCache.has(id)) return _clothingImageCache.get(id);
-    const res = await fetch(`/api/clothing/images?ids=${encodeURIComponent(id)}`, { credentials: "same-origin", cache: "force-cache" });
-    if (!res.ok) throw new Error(`clothing image ${id} failed: HTTP ${res.status}`);
-    const data = await res.json();
-    const url = data[String(id)] || data[id] || null;
-    _clothingImageCache.set(id, url);
-    return url;
+    const cached = _getClothingImageCache(id);
+    if (cached.hit) return cached.url;
+    if (_clothingImageInflight.has(id)) return _clothingImageInflight.get(id).promise;
+
+    let resolve;
+    const promise = new Promise((done) => { resolve = done; });
+    _clothingImageInflight.set(id, { promise, resolve });
+    _clothingImageQueue.add(id);
+
+    if (!_clothingImageTimer) {
+        _clothingImageTimer = setTimeout(_flushClothingImageQueue, 0);
+    }
+
+    return promise;
+}
+
+function _getClothingImageCache(id) {
+    const entry = _clothingImageCache.get(id);
+    if (!entry) return { hit: false, url: null };
+    if (entry.expiresAt <= Date.now()) {
+        _clothingImageCache.delete(id);
+        return { hit: false, url: null };
+    }
+    return { hit: true, url: entry.url };
+}
+
+function _setClothingImageCache(id, url, ttlMs) {
+    _clothingImageCache.set(id, {
+        url: url || null,
+        expiresAt: Date.now() + ttlMs
+    });
+}
+
+function _readClothingImageUrl(data, id) {
+    if (!data) return null;
+    const direct = data[String(id)] ?? data[id];
+    if (typeof direct === "string") return direct;
+    const nested = data.images?.[String(id)] ?? data.images?.[id] ?? data.urls?.[String(id)] ?? data.urls?.[id];
+    if (typeof nested === "string") return nested;
+    const list = Array.isArray(data) ? data : (Array.isArray(data.images) ? data.images : []);
+    const match = list.find((item) => Number(item?.id) === Number(id));
+    return typeof match?.url === "string" ? match.url : (typeof match?.image === "string" ? match.image : null);
+}
+
+async function _flushClothingImageQueue() {
+    const queued = [..._clothingImageQueue];
+    _clothingImageQueue.clear();
+    _clothingImageTimer = null;
+
+    const ids = [];
+    for (const id of queued) {
+        const cached = _getClothingImageCache(id);
+        if (cached.hit) {
+            const pending = _clothingImageInflight.get(id);
+            _clothingImageInflight.delete(id);
+            pending?.resolve(cached.url);
+        } else {
+            ids.push(id);
+        }
+    }
+
+    if (!ids.length) return;
+
+    let data = null;
+    let failed = false;
+    try {
+        const res = await fetch(`/api/clothing/images?ids=${ids.map((item) => encodeURIComponent(item)).join(",")}`, { credentials: "same-origin", cache: "force-cache" });
+        if (!res.ok) {
+            failed = true;
+            if (res.status === 429) console.warn(`[avatar] clothing image lookup rate limited for ${ids.length} item(s)`);
+            else console.warn(`[avatar] clothing image lookup failed: HTTP ${res.status}`);
+        } else {
+            data = await res.json();
+        }
+    } catch (err) {
+        failed = true;
+        console.warn("[avatar] clothing image lookup failed", err);
+    }
+
+    for (const id of ids) {
+        const url = failed ? null : _readClothingImageUrl(data, id);
+        _setClothingImageCache(id, url, failed ? CLOTHING_IMAGE_RETRY_MS : CLOTHING_IMAGE_TTL_MS);
+        const pending = _clothingImageInflight.get(id);
+        _clothingImageInflight.delete(id);
+        pending?.resolve(url || null);
+    }
+
+    if (_clothingImageQueue.size && !_clothingImageTimer) {
+        _clothingImageTimer = setTimeout(_flushClothingImageQueue, 0);
+    }
 }
 
 async function _avatarClothingUrl(id) {
     return _avatarRenderer === "legacy" ? _legacyClothingUrl(id) : _modernClothingUrl(id);
+}
+
+function _avatarImageIds(avatar) {
+    const normalized = _normalizeAvatar(avatar, _neutralAvatarState);
+    return [normalized.shirt_id, normalized.pant_id, normalized.face_id].filter((id) => Number(id) > 0);
+}
+
+function _prefetchAvatarImages(avatars = []) {
+    if (_avatarRenderer === "legacy") return;
+    const unique = new Set();
+    for (const avatar of avatars) {
+        for (const id of _avatarImageIds(avatar)) unique.add(id);
+    }
+    for (const id of unique) _modernClothingUrl(id).catch(() => null);
 }
 
 function _registerBone(child) {
@@ -897,9 +999,14 @@ async function _applyAvatar(avatar = {}) {
 
     if (_avatarRenderer === "modern") {
         _applyBodyColors(character, _avatarState.body_colors);
-        _applyShirtToMesh(_shirtMesh, await _avatarClothingUrl(_avatarState.shirt_id).catch(() => null));
-        _applyShirtToMesh(_pantsMesh, await _avatarClothingUrl(_avatarState.pant_id).catch(() => null));
-        _applyShirtToMesh(_faceMesh, await _avatarClothingUrl(_avatarState.face_id).catch(() => null));
+        const [shirtUrl, pantsUrl, faceUrl] = await Promise.all([
+            _avatarClothingUrl(_avatarState.shirt_id).catch(() => null),
+            _avatarClothingUrl(_avatarState.pant_id).catch(() => null),
+            _avatarClothingUrl(_avatarState.face_id).catch(() => null),
+        ]);
+        _applyShirtToMesh(_shirtMesh, shirtUrl);
+        _applyShirtToMesh(_pantsMesh, pantsUrl);
+        _applyShirtToMesh(_faceMesh, faceUrl);
     } else {
         _applyShirtToMesh(_shirtMesh, _legacyClothingUrl(_avatarState.shirt_id));
     }
@@ -2350,6 +2457,9 @@ window._vortex = {
     applyBodyColors(target, colors) {
         _applyBodyColors(target, colors);
     },
+    prefetchAvatarImages(avatars) {
+        _prefetchAvatarImages(Array.isArray(avatars) ? avatars : [avatars]);
+    },
     async applyAvatar(avatar) {
         await _applyAvatar(avatar);
     },
@@ -2359,9 +2469,14 @@ window._vortex = {
         if (window.VortexAvatarDebug) console.debug("[avatar] remote", JSON.stringify(normalized));
         if (_avatarRenderer === "modern") {
             _applyBodyColors(meshes.grp, normalized.body_colors);
-            _applyShirtToMesh(meshes.shirtMesh, await _avatarClothingUrl(normalized.shirt_id).catch(() => null));
-            _applyShirtToMesh(meshes.pantsMesh, await _avatarClothingUrl(normalized.pant_id).catch(() => null));
-            _applyShirtToMesh(meshes.faceMesh, await _avatarClothingUrl(normalized.face_id).catch(() => null));
+            const [shirtUrl, pantsUrl, faceUrl] = await Promise.all([
+                _avatarClothingUrl(normalized.shirt_id).catch(() => null),
+                _avatarClothingUrl(normalized.pant_id).catch(() => null),
+                _avatarClothingUrl(normalized.face_id).catch(() => null),
+            ]);
+            _applyShirtToMesh(meshes.shirtMesh, shirtUrl);
+            _applyShirtToMesh(meshes.pantsMesh, pantsUrl);
+            _applyShirtToMesh(meshes.faceMesh, faceUrl);
         } else {
             _applyShirtToMesh(meshes.shirtMesh, _legacyClothingUrl(normalized.shirt_id));
             _applyShirtToMesh(meshes.pantsMesh, null);

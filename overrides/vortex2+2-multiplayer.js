@@ -1459,7 +1459,9 @@ function handle(d) {
             }
             Leaderboard.setMyId(myId);
             Leaderboard.addPlayer({ id: myId, username: d.username, is_staff: d.is_staff, is_booster: d.is_booster });
-            for (const p of d.players) {
+            const initialPlayers = Array.isArray(d.players) ? d.players : [];
+            _vortex.prefetchAvatarImages?.([d, ...initialPlayers]);
+            for (const p of initialPlayers) {
                 addRemote(p.id, p.username, p.is_staff, p.is_booster, p);
                 _showHealthBar(p.id)
             }
@@ -1480,6 +1482,7 @@ function handle(d) {
 
         case 'join': {
             if (d.id === myId) break;
+            _vortex.prefetchAvatarImages?.(d);
             addRemote(d.id, d.username, d.is_staff, d.is_booster, d);
             _showHealthBar(d.id);
             Chat.systemPlayer(d.username, `${d.username} joined.`);
@@ -1501,7 +1504,9 @@ function handle(d) {
         }
 
         case 'states': {
-            for (const p of d.players) {
+            const players = Array.isArray(d.players) ? d.players : [];
+            _vortex.prefetchAvatarImages?.(players);
+            for (const p of players) {
                 if (p.id !== myId && !remotes.has(p.id)) {
                     addRemote(p.id, p.username, p.is_staff, p.is_booster, p);
                 }
@@ -1554,6 +1559,7 @@ function handle(d) {
         }
 
         case "shirt_update": {
+            _vortex.prefetchAvatarImages?.(d);
             const rp = remotes.get(d.id);
             if (rp?.meshes) {
                 const avatar = _normalizeAvatarFields({ ...(rp.avatar || {}), ...d });
