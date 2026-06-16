@@ -572,6 +572,7 @@ let CHAR_HALF_D = 0.5;
 let CAM_H_SENS = 0.0015 * Math.PI;
 let CAM_V_SENS = 0.0015 * Math.PI;
 const CAM_PIVOT_Y = 2.56;
+const CAM_REFERENCE_FOOT_OFFSET = 2.08;
 const SHIFT_LOCK_OFFSET = 1.75;
 const CAM_KEY_ZOOM_SPEED = 32;
 
@@ -769,10 +770,6 @@ function _normalizeAvatar(avatar = {}, fallback = _avatarState) {
     };
 }
 
-function _legacyClothingUrl(id) {
-    return id ? `/assets/clothing/${id}.png` : null;
-}
-
 async function _modernClothingUrl(id) {
     id = Number(id || 0);
     if (!id) return null;
@@ -869,7 +866,7 @@ async function _flushClothingImageQueue() {
 }
 
 async function _avatarClothingUrl(id) {
-    return _avatarRenderer === "legacy" ? _legacyClothingUrl(id) : _modernClothingUrl(id);
+    return _modernClothingUrl(id);
 }
 
 function _avatarImageIds(avatar) {
@@ -878,7 +875,6 @@ function _avatarImageIds(avatar) {
 }
 
 function _prefetchAvatarImages(avatars = []) {
-    if (_avatarRenderer === "legacy") return;
     const unique = new Set();
     for (const avatar of avatars) {
         for (const id of _avatarImageIds(avatar)) unique.add(id);
@@ -1008,7 +1004,8 @@ async function _applyAvatar(avatar = {}) {
         _applyShirtToMesh(_pantsMesh, pantsUrl);
         _applyShirtToMesh(_faceMesh, faceUrl);
     } else {
-        _applyShirtToMesh(_shirtMesh, _legacyClothingUrl(_avatarState.shirt_id));
+        const shirtUrl = await _avatarClothingUrl(_avatarState.shirt_id).catch(() => null);
+        _applyShirtToMesh(_shirtMesh, shirtUrl);
     }
 }
 
@@ -2207,7 +2204,7 @@ function updateCamera(dt) {
 
     const pivot = new THREE.Vector3(
         character.position.x,
-        character.position.y + CAM_PIVOT_Y,
+        character.position.y + CAM_PIVOT_Y + CAM_REFERENCE_FOOT_OFFSET - CHAR_FOOT_OFFSET,
         character.position.z
     );
 
@@ -2478,7 +2475,8 @@ window._vortex = {
             _applyShirtToMesh(meshes.pantsMesh, pantsUrl);
             _applyShirtToMesh(meshes.faceMesh, faceUrl);
         } else {
-            _applyShirtToMesh(meshes.shirtMesh, _legacyClothingUrl(normalized.shirt_id));
+            const shirtUrl = await _avatarClothingUrl(normalized.shirt_id).catch(() => null);
+            _applyShirtToMesh(meshes.shirtMesh, shirtUrl);
             _applyShirtToMesh(meshes.pantsMesh, null);
             _applyShirtToMesh(meshes.faceMesh, null);
         }
