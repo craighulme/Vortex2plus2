@@ -16,10 +16,14 @@
   ],
   "permissions": [
     "storage",
+    "alarms",
     "activeTab",
     "scripting",
     "declarativeNetRequest"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup/popup.html"
   },
@@ -55,6 +59,7 @@
       "js": [
         "js/webVortexLoader.js",
         "js/lightMode.js",
+        "js/features/UpdateNotifier.js",
         "js/features/PlayInBrowserButton.js"
       ],
       "run_at": "document_start"
