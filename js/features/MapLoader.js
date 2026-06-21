@@ -389,7 +389,7 @@ async function initialize() {
     var gamei = url.searchParams.get("V22GameId");
     var play = url.searchParams.get("Play");
     await importMapAssets();
-    if (document.location.pathname == '/home' || document.location.pathname == '/social' || document.location.pathname == '/search' || document.location.pathname == '/games/2') {
+    if (document.location.pathname == '/home' || document.location.pathname == '/social' || document.location.pathname == '/search') {
         let f = await fetch('/api/game-stats')
         let gameStats = await f.json()
         async function waitForGamesLoaded() {
