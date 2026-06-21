@@ -12,7 +12,8 @@
   "host_permissions": [
     "https://playvortex.io/*",
     "https://vortex.towerstats.com/*",
-    "https://raw.githubusercontent.com/craighulme/Vortex2plus2/*"
+    "https://raw.githubusercontent.com/craighulme/Vortex2plus2/*",
+    "https://api.github.com/repos/craighulme/Vortex2plus2/*"
   ],
   "permissions": [
     "storage",

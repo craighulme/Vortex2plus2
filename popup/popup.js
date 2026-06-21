@@ -20,7 +20,7 @@ let dismissUpdateBtn = document.getElementById('dismissUpdateBtn')
 const LOCAL_NATIVE_RELAY = "ws://127.0.0.1:27822/ws";
 const HOSTED_NATIVE_RELAY = "wss://v22-relay.116.203.155.30.sslip.io/ws";
 const HOSTED_LICENSE_API = "https://v22.irongiant.vip";
-const UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/craighulme/Vortex2plus2/main/extension-update.json";
+const UPDATE_MANIFEST_URL = "https://api.github.com/repos/craighulme/Vortex2plus2/contents/extension-update.json?ref=main";
 const REPO_URL = "https://github.com/craighulme/Vortex2plus2";
 const CURRENT_VERSION = extensionApi.runtime?.getManifest?.().version || "0.0.0";
 
@@ -119,6 +119,13 @@ function openUrl(url) {
     window.open(safeUrl, "_blank", "noopener");
 }
 
+function decodeUpdatePayload(raw) {
+    if (raw?.content && raw.encoding === "base64") {
+        return JSON.parse(atob(String(raw.content).replace(/\s/g, "")));
+    }
+    return raw;
+}
+
 function renderUpdateCard(update, isNewer) {
     const latestVersion = String(update.version || "");
     const updateUrl = String(update.url || REPO_URL);
@@ -153,7 +160,7 @@ async function checkForUpdates() {
             headers: { accept: "application/json" }
         });
         if (!res.ok) return;
-        const update = await res.json();
+        const update = decodeUpdatePayload(await res.json());
         const latestVersion = String(update.version || "");
         if (!latestVersion) return;
         const isNewer = compareVersions(latestVersion, CURRENT_VERSION) > 0;

@@ -1,4 +1,4 @@
-const UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/craighulme/Vortex2plus2/main/extension-update.json";
+const UPDATE_MANIFEST_URL = "https://api.github.com/repos/craighulme/Vortex2plus2/contents/extension-update.json?ref=main";
 const REPO_URL = "https://github.com/craighulme/Vortex2plus2";
 const UPDATE_ALARM = "v22-update-check";
 const CHECK_INTERVAL_MINUTES = 240;
@@ -45,12 +45,15 @@ function storageSet(area, value) {
 }
 
 async function fetchUpdateManifest() {
-    const res = await fetch(`${UPDATE_MANIFEST_URL}?t=${Date.now()}`, {
+    const res = await fetch(`${UPDATE_MANIFEST_URL}&t=${Date.now()}`, {
         cache: "no-store",
         headers: { accept: "application/json" }
     });
     if (!res.ok) throw new Error(`update check failed: HTTP ${res.status}`);
-    const update = await res.json();
+    const raw = await res.json();
+    const update = raw?.content && raw.encoding === "base64"
+        ? JSON.parse(atob(String(raw.content).replace(/\s/g, "")))
+        : raw;
     update.version = String(update.version || "");
     update.url = String(update.url || REPO_URL);
     update.summary = String(update.summary || update.title || "");
