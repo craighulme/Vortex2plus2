@@ -86,12 +86,88 @@
       font-size: 11px;
       color: #9ecbff;
     }
+
+    .update-card {
+      margin: 12px 0;
+      padding: 10px;
+      border: 1px solid #303747;
+      border-radius: 8px;
+      background: #141821;
+      text-align: left;
+    }
+
+    .update-card[hidden] {
+      display: none;
+    }
+
+    .update-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 7px;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .update-pill {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      padding: 2px 7px;
+      background: #1d4ed8;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .update-body {
+      margin: 0 0 8px;
+      color: #cfd7e6;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .update-list {
+      margin: 0 0 9px;
+      padding-left: 17px;
+      color: #dce3ef;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .update-list li {
+      margin: 3px 0;
+    }
+
+    .update-actions {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .update-actions button {
+      border: 0;
+      border-radius: 6px;
+      padding: 7px 9px;
+      background: #2f5fbf;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .update-actions .link-button {
+      background: transparent;
+      color: #9ecbff;
+      padding-inline: 0;
+    }
   </style>
 </head>
 
 <body>
-  <h1>Vortex2+2</h2>
-    <p>Version 0.1.0</p>
+  <h1>Vortex2+2</h1>
+    <p id="extensionVersion">Version</p>
     <h3>
       Settings:
     </h3>
@@ -127,6 +203,19 @@
       </div>
 
       <div id="hubStatus"></div>
+
+      <div id="updateCard" class="update-card" hidden>
+        <div class="update-header">
+          <span id="updateTitle">Update available</span>
+          <span id="updatePill" class="update-pill">New</span>
+        </div>
+        <p id="updateBody" class="update-body"></p>
+        <ul id="updateList" class="update-list"></ul>
+        <div class="update-actions">
+          <button id="openUpdateBtn" type="button">Open repo</button>
+          <button id="dismissUpdateBtn" class="link-button" type="button">Dismiss</button>
+        </div>
+      </div>
 
       <style>
         .checkbox-wrapper-4 * {

@@ -550,7 +550,25 @@ async function fetchFriendData() {
 }
 
 let _reconnectAttempts = 0;
-const _MAX_RECONNECTS = 3;
+const _MAX_RECONNECTS = 20;
+const _RECONNECT_BASE_MS = 1200;
+const _RECONNECT_MAX_MS = 15000;
+
+function _scheduleReconnect(label = "relay") {
+    stopBroadcast();
+    const closedWs = ws;
+    ws = null;
+    connectFinished = false;
+    if (closedWs?._kicked) return;
+    if (_reconnectAttempts >= _MAX_RECONNECTS) {
+        try { Chat.warn(`Vortex2+2 ${label} disconnected. Reload the page to retry.`); } catch { }
+        return;
+    }
+    _reconnectAttempts += 1;
+    const delay = Math.min(_RECONNECT_MAX_MS, _RECONNECT_BASE_MS * Math.pow(1.45, _reconnectAttempts - 1));
+    try { Chat.system(`Vortex2+2 ${label} disconnected. Reconnecting in ${(delay / 1000).toFixed(1)}s...`); } catch { }
+    setTimeout(connect, delay);
+}
 
 function randomHexToken(bytes = 32) {
     const values = new Uint8Array(bytes);
@@ -1311,6 +1329,11 @@ function _requireLicenseFeature(feature, label) {
     return false;
 }
 
+function _assertLicenseFeature(feature, label) {
+    if (_hasLicenseFeature(feature)) return true;
+    throw new Error(`${label || feature} is not enabled on this license`);
+}
+
 function _parseMovementRecord(buffer, offset, hasPacketType) {
     const view = new DataView(buffer, offset);
     const start = hasPacketType ? 4 : 0;
@@ -1792,12 +1815,7 @@ async function connectOnce() {
         };
 
         ws.onclose = () => {
-            stopBroadcast();
-            if (!ws._kicked) {
-                if (_reconnectAttempts >= _MAX_RECONNECTS) return;
-                _reconnectAttempts++;
-                ws._retry = setTimeout(connect, 3000);
-            }
+            _scheduleReconnect("relay");
         };
 
         ws.onerror = () => {
@@ -1851,12 +1869,7 @@ async function connectOnce() {
     };
 
     ws.onclose = () => {
-        stopBroadcast();
-        if (!ws._kicked) {
-            if (_reconnectAttempts >= _MAX_RECONNECTS) return;
-            _reconnectAttempts++;
-            ws._retry = setTimeout(connect, 3000);
-        }
+        _scheduleReconnect("multiplayer websocket");
     };
 
     ws.onerror = () => {
@@ -2651,6 +2664,34 @@ function _findCommandPlayer(query) {
     return { error: `no player matching "${query}"` };
 }
 
+function _movementMods() {
+    return _vortex.getMovementMods?.() || {
+        fly: false,
+        noclip: false,
+        airwalk: false,
+        gravityScale: 1,
+        flySpeed: 28
+    };
+}
+
+function _setMovementMods(patch = {}) {
+    if (!_vortex.setMovementMods) throw new Error("movement modifiers are not available in this build");
+    return _vortex.setMovementMods(patch);
+}
+
+function _toggleValue(arg, current) {
+    const value = String(arg || "").trim().toLowerCase();
+    if (!value) return !current;
+    if (["1", "on", "true", "yes", "y", "enable", "enabled"].includes(value)) return true;
+    if (["0", "off", "false", "no", "n", "disable", "disabled"].includes(value)) return false;
+    return null;
+}
+
+function _movementStatusLine() {
+    const mods = _movementMods();
+    return `Movement: fly=${mods.fly ? "on" : "off"}, noclip=${mods.noclip ? "on" : "off"}, airwalk=${mods.airwalk ? "on" : "off"}, gravity=${Number(mods.gravityScale).toFixed(2)}, flySpeed=${Number(mods.flySpeed).toFixed(1)}`;
+}
+
 function _teleportLocalToScene(x, y, z) {
     const char = _vortex.getCharacter?.();
     if (!char) return false;
@@ -2666,7 +2707,7 @@ function _formatPos(pos) {
 }
 
 function _chatCommandHelp() {
-    Chat.system("Commands: ::goto <player>, ::tp <x> <y> <z>, ::where [player], ::players, ::bring <player>, ::help");
+    Chat.system("Commands: ::goto <player>, ::tp <x> <y> <z>, ::where [player], ::players, ::bring <player>, ::fly [on/off/speed], ::noclip [on/off], ::airwalk [on/off], ::setgravity <scale/reset>, ::movement");
 }
 
 window._mpHandleChatCommand = function (text) {
@@ -2703,6 +2744,73 @@ window._mpHandleChatCommand = function (text) {
             return true;
         }
         Chat.system(`${found.player.username} is at ${_formatPos(found.player.pos)}.`);
+        return true;
+    }
+
+    if (command === "movement" || command === "moves" || command === "mods") {
+        Chat.system(_movementStatusLine());
+        return true;
+    }
+
+    if (command === "fly") {
+        if (!_requireLicenseFeature("fly-command", "::fly")) return true;
+        const mods = _movementMods();
+        let enabled = _toggleValue(parts[0], mods.fly);
+        let speed = Number(parts[0]);
+        if (enabled === null && Number.isFinite(speed)) enabled = true;
+        if (enabled === null) {
+            Chat.warn("Usage: ::fly [on|off|speed]");
+            return true;
+        }
+        if (!Number.isFinite(speed) && parts[1] !== undefined) speed = Number(parts[1]);
+        const next = _setMovementMods(Number.isFinite(speed) ? { fly: enabled, flySpeed: speed } : { fly: enabled });
+        Chat.system(`Fly ${next.fly ? "enabled" : "disabled"}. ${_movementStatusLine()}`);
+        return true;
+    }
+
+    if (command === "noclip" || command === "clip") {
+        if (!_requireLicenseFeature("noclip-command", "::noclip")) return true;
+        const mods = _movementMods();
+        const enabled = command === "clip"
+            ? _toggleValue(parts[0], !mods.noclip)
+            : _toggleValue(parts[0], mods.noclip);
+        if (enabled === null) {
+            Chat.warn(command === "clip" ? "Usage: ::clip [on|off]" : "Usage: ::noclip [on|off]");
+            return true;
+        }
+        const next = _setMovementMods({ noclip: command === "clip" ? !enabled : enabled });
+        Chat.system(`Noclip ${next.noclip ? "enabled" : "disabled"}. ${_movementStatusLine()}`);
+        return true;
+    }
+
+    if (command === "airwalk" || command === "air") {
+        if (!_requireLicenseFeature("airwalk-command", "::airwalk")) return true;
+        const mods = _movementMods();
+        const enabled = _toggleValue(parts[0], mods.airwalk);
+        if (enabled === null) {
+            Chat.warn("Usage: ::airwalk [on|off]");
+            return true;
+        }
+        const next = _setMovementMods({ airwalk: enabled });
+        Chat.system(`Airwalk ${next.airwalk ? "enabled" : "disabled"}. ${_movementStatusLine()}`);
+        return true;
+    }
+
+    if (command === "setgravity" || command === "gravity" || command === "fallspeed") {
+        if (!_requireLicenseFeature("gravity-command", "::setgravity")) return true;
+        const value = String(parts[0] || "").trim().toLowerCase();
+        if (!value || value === "reset" || value === "normal" || value === "default") {
+            const next = _setMovementMods({ gravityScale: 1 });
+            Chat.system(`Gravity reset. ${_movementStatusLine()}`);
+            return true;
+        }
+        const scale = Number(value);
+        if (!Number.isFinite(scale) || scale < 0 || scale > 8) {
+            Chat.warn("Usage: ::setgravity <0..8|reset>");
+            return true;
+        }
+        const next = _setMovementMods({ gravityScale: scale });
+        Chat.system(`Gravity scale set to ${Number(next.gravityScale).toFixed(2)}. ${_movementStatusLine()}`);
         return true;
     }
 
@@ -2801,6 +2909,48 @@ window.addEventListener("v22-character-renderer-changed", () => {
     }
     window._mpRebuildAvatars?.();
 });
+
+window.VortexMovement = {
+    get() {
+        return _movementMods();
+    },
+    status() {
+        return _movementStatusLine();
+    },
+    fly(value = null, speed = null) {
+        _assertLicenseFeature("fly-command", "fly");
+        const mods = _movementMods();
+        const numericValue = Number(value);
+        const enabled = value === null ? !mods.fly : (Number.isFinite(numericValue) ? true : _toggleValue(value, mods.fly));
+        if (enabled === null) throw new Error("fly expects true/false/on/off");
+        const numericSpeed = Number(speed ?? (Number.isFinite(numericValue) ? numericValue : NaN));
+        return _setMovementMods(Number.isFinite(numericSpeed) ? { fly: enabled, flySpeed: numericSpeed } : { fly: enabled });
+    },
+    noclip(value = null) {
+        _assertLicenseFeature("noclip-command", "noclip");
+        const mods = _movementMods();
+        const enabled = value === null ? !mods.noclip : _toggleValue(value, mods.noclip);
+        if (enabled === null) throw new Error("noclip expects true/false/on/off");
+        return _setMovementMods({ noclip: enabled });
+    },
+    airwalk(value = null) {
+        _assertLicenseFeature("airwalk-command", "airwalk");
+        const mods = _movementMods();
+        const enabled = value === null ? !mods.airwalk : _toggleValue(value, mods.airwalk);
+        if (enabled === null) throw new Error("airwalk expects true/false/on/off");
+        return _setMovementMods({ airwalk: enabled });
+    },
+    setGravity(scale = 1) {
+        _assertLicenseFeature("gravity-command", "setGravity");
+        const value = String(scale).toLowerCase();
+        const gravityScale = value === "reset" || value === "normal" || value === "default" ? 1 : Number(scale);
+        if (!Number.isFinite(gravityScale) || gravityScale < 0 || gravityScale > 8) throw new Error("gravity scale must be between 0 and 8");
+        return _setMovementMods({ gravityScale });
+    },
+    reset() {
+        return _setMovementMods({ fly: false, noclip: false, airwalk: false, gravityScale: 1, flySpeed: 28 });
+    }
+};
 
 window.VortexAvatar = {
     get renderer() {

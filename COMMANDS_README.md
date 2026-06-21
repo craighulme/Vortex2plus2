@@ -11,6 +11,10 @@ For a license key or more command authorisation, contact `quackduck.` on Discord
 | Base license | Requires a valid Vortex2+2 license with `vortex-native-bridge`. |
 | `teleport-commands` | Allows local teleport chat commands. The hosted relay also rejects obvious movement jumps unless this feature is on the lease. |
 | `bring-command` | Allows the local-only bring command. This moves the remote model in your browser view only. |
+| `fly-command` | Allows browser-side fly mode. Space rises, Shift/Ctrl descends. |
+| `noclip-command` | Allows browser-side noclip mode, bypassing local map collision. |
+| `gravity-command` | Allows browser-side gravity/fall-speed scaling. |
+| `airwalk-command` | Allows browser-side airwalk mode, which keeps the player from being pulled down by gravity. |
 | `avatar-spoof` | Allows avatar override/spoof commands. The hosted relay enforces this for join/avatar data it receives. |
 | `packet-debug` | Allows packet/debug inspection helpers. These are intended for authorised testing, not normal users. |
 | Local/dev only | Intended for private development or local relay testing. |
@@ -27,6 +31,11 @@ Chat commands are typed in Vortex chat and start with `::`.
 | `::tp <x> <y> <z>` | `::teleport` | `teleport-commands` | Moves your local browser character to the supplied coordinates. |
 | `::goto <player>` | `::to` | `teleport-commands` | Moves your local browser character to the named/id-matched remote player's last known position. |
 | `::bring <player>` | none | `bring-command` | Moves the selected remote model near you locally. This does not move that player server-side. |
+| `::fly [on\|off\|speed]` | none | `fly-command` | Toggles fly mode. Use Space to rise and Shift/Ctrl to descend. A number sets fly speed. |
+| `::noclip [on\|off]` | `::clip` | `noclip-command` | Toggles local collision bypass. `::clip` is the inverse helper for turning collision back on. |
+| `::airwalk [on\|off]` | `::air` | `airwalk-command` | Toggles walking in mid-air without gravity pulling you down. |
+| `::setgravity <0..8\|reset>` | `::gravity`, `::fallspeed` | `gravity-command` | Changes gravity/fall speed scale. `1` is normal, `0.5` is slower, `2` is faster, `0` removes gravity. |
+| `::movement` | `::moves`, `::mods` | Base license | Prints current fly/noclip/airwalk/gravity state. |
 
 ## Console Commands
 
@@ -87,6 +96,20 @@ These helpers interact with the local browser avatar renderer and/or the logged-
 | `VortexAvatar.setRenderer(mode)` | Base license | Changes renderer mode through the local Vortex2+2 avatar renderer. |
 | `VortexAvatar.getOutfit()` | Base license | Returns the current local outfit data. |
 | `await VortexAvatar.setOutfit(outfit, persist)` | Logged-in Vortex account | Applies an outfit locally; if `persist` is true, sends it to `/api/clothing/outfit`. |
+
+### `window.VortexMovement`
+
+These helpers mirror the movement chat commands from devtools.
+
+| Command | Access | Notes |
+| --- | --- | --- |
+| `VortexMovement.get()` | Base license | Returns current movement modifier state. |
+| `VortexMovement.status()` | Base license | Returns a readable movement state string. |
+| `VortexMovement.fly(value, speed)` | `fly-command` | Toggles fly mode. `VortexMovement.fly(40)` enables fly at speed 40. |
+| `VortexMovement.noclip(value)` | `noclip-command` | Toggles collision bypass. |
+| `VortexMovement.airwalk(value)` | `airwalk-command` | Toggles airwalk/no-fall mode. |
+| `VortexMovement.setGravity(scale)` | `gravity-command` | Sets gravity scale from `0` to `8`, or pass `"reset"`. |
+| `VortexMovement.reset()` | Base license | Disables fly/noclip/airwalk and restores normal gravity/speed. |
 
 ### Browser Internals / Local Debug Helpers
 

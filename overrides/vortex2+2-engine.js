@@ -676,6 +676,38 @@ const CLIMB_JUMP_BACK_V = 14;
 const HANG_DEPTH = 1.2;
 
 let extraVelX = 0, extraVelZ = 0;
+const movementMods = {
+    fly: false,
+    noclip: false,
+    airwalk: false,
+    gravityScale: 1,
+    flySpeed: 28
+};
+
+function setMovementMods(patch = {}) {
+    if (patch.fly !== undefined) movementMods.fly = !!patch.fly;
+    if (patch.noclip !== undefined) movementMods.noclip = !!patch.noclip;
+    if (patch.airwalk !== undefined) movementMods.airwalk = !!patch.airwalk;
+    if (patch.gravityScale !== undefined) {
+        const scale = Number(patch.gravityScale);
+        movementMods.gravityScale = Number.isFinite(scale) ? Math.max(0, Math.min(8, scale)) : 1;
+    }
+    if (patch.flySpeed !== undefined) {
+        const speed = Number(patch.flySpeed);
+        movementMods.flySpeed = Number.isFinite(speed) ? Math.max(2, Math.min(120, speed)) : 28;
+    }
+    if (movementMods.fly || movementMods.airwalk) {
+        velY = 0;
+        grounded = true;
+        jumpBuffer = 0;
+        climbState = 'none';
+    }
+    return { ...movementMods };
+}
+
+function getMovementMods() {
+    return { ...movementMods };
+}
 
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
@@ -2061,6 +2093,8 @@ function update(dt) {
 
     const moving = moveInput.lengthSq() > 0;
     let velX = 0, velZ = 0;
+    const movementSpeed = (movementMods.fly || movementMods.noclip) ? movementMods.flySpeed : WALK_SPEED;
+    if (movementMods.fly || movementMods.noclip || movementMods.airwalk) stepUpTarget = -Infinity;
     if (moving) {
         moveInput.normalize();
         const yawQuat = new THREE.Quaternion().setFromAxisAngle(
@@ -2068,8 +2102,8 @@ function update(dt) {
         );
         moveInput.applyQuaternion(yawQuat);
 
-        velX = moveInput.x * WALK_SPEED;
-        velZ = moveInput.z * WALK_SPEED;
+        velX = moveInput.x * movementSpeed;
+        velZ = moveInput.z * movementSpeed;
 
         if (!mouseLock) {
             const targetAngle = Math.atan2(moveInput.x, moveInput.z);
@@ -2081,13 +2115,16 @@ function update(dt) {
     velZ += extraVelZ;
 
     const sp2 = velX * velX + velZ * velZ;
-    if (sp2 > WALK_SPEED * WALK_SPEED) {
-        const sc = WALK_SPEED / Math.sqrt(sp2);
+    if (sp2 > movementSpeed * movementSpeed) {
+        const sc = movementSpeed / Math.sqrt(sp2);
         velX *= sc;
         velZ *= sc;
     }
 
-    {
+    if (movementMods.noclip) {
+        character.position.x += velX * dt;
+        character.position.z += velZ * dt;
+    } else {
         const fy0 = character.position.y - CHAR_FOOT_OFFSET;
         const aco = Math.abs(Math.cos(character.rotation.y));
         const asi = Math.abs(Math.sin(character.rotation.y));
@@ -2162,9 +2199,11 @@ function update(dt) {
 
     const nearby = getNearbyColliders(character.position.x, character.position.y, character.position.z);
 
-    resolveBlocksH(nearby, dt);
-    resolveOBBH(nearby);
-    tryLedgeGrab(nearby);
+    if (!movementMods.noclip) {
+        resolveBlocksH(nearby, dt);
+        resolveOBBH(nearby);
+        if (!movementMods.fly && !movementMods.airwalk) tryLedgeGrab(nearby);
+    }
 
     if (grounded) coyoteTimer = COYOTE_TIME;
     else coyoteTimer = Math.max(0, coyoteTimer - dt);
@@ -2172,21 +2211,38 @@ function update(dt) {
     if (keys['Space']) jumpBuffer = JUMP_BUFFER;
     jumpBuffer = Math.max(0, jumpBuffer - dt);
 
-    velY += GRAVITY * dt;
-    character.position.y += velY * dt;
+    if (movementMods.fly) {
+        const vertical = (keys['Space'] ? 1 : 0) -
+            ((keys['ShiftLeft'] || keys['ShiftRight'] || keys['ControlLeft'] || keys['ControlRight']) ? 1 : 0);
+        character.position.y += vertical * movementMods.flySpeed * dt;
+        velY = 0;
+        grounded = true;
+        coyoteTimer = COYOTE_TIME;
+        jumpBuffer = 0;
+    } else if (movementMods.airwalk) {
+        velY = 0;
+        grounded = true;
+        coyoteTimer = COYOTE_TIME;
+        jumpBuffer = 0;
+    } else {
+        velY += GRAVITY * movementMods.gravityScale * dt;
+        character.position.y += velY * dt;
+        grounded = false;
+    }
 
-    grounded = false;
-    if (character.position.y <= CHAR_STAND_Y) {
+    if (!movementMods.noclip && character.position.y <= CHAR_STAND_Y) {
         character.position.y = CHAR_STAND_Y;
         velY = 0;
         grounded = true;
         extraVelX = 0; extraVelZ = 0;
     }
 
-    resolveBlocksV(nearby, dt);
-    resolveOBBV(nearby);
+    if (!movementMods.noclip) {
+        resolveBlocksV(nearby, dt);
+        resolveOBBV(nearby);
+    }
 
-    if (jumpBuffer > 0 && (grounded || coyoteTimer > 0)) {
+    if (!movementMods.fly && !movementMods.airwalk && jumpBuffer > 0 && (grounded || coyoteTimer > 0)) {
         velY = JUMP_POWER;
         grounded = false;
         coyoteTimer = 0;
@@ -2410,6 +2466,9 @@ window._vortex = {
     setVelY(v) { velY = Number(v) || 0; },
     setGrounded(v) { grounded = !!v; },
     getMovementConstants: () => ({ WALK_SPEED, JUMP_POWER, GRAVITY }),
+    getMovementMods,
+    setMovementMods,
+    getCameraState: () => ({ yaw: cam.yaw, pitch: cam.pitch, distance: cam.distance }),
     getClimbState: () => climbState,
     getCharFootOffset: () => CHAR_FOOT_OFFSET,
     getCharHeight: () => CHAR_HEIGHT,

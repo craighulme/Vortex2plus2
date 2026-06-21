@@ -7,7 +7,11 @@
         "avatar-spoof",
         "teleport-commands",
         "bring-command",
-        "packet-debug"
+        "packet-debug",
+        "fly-command",
+        "noclip-command",
+        "gravity-command",
+        "airwalk-command"
     ];
 
     function gameIdFromPath() {

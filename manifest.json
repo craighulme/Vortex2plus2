@@ -1,6 +1,6 @@
 {
   "name": "Vortex2+2",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "manifest_version": 3,
   "description": "An extension to make Vortex so much better.",
   "icons": {
@@ -11,7 +11,8 @@
   },
   "host_permissions": [
     "https://playvortex.io/*",
-    "https://vortex.towerstats.com/*"
+    "https://vortex.towerstats.com/*",
+    "https://raw.githubusercontent.com/craighulme/Vortex2plus2/*"
   ],
   "permissions": [
     "storage",

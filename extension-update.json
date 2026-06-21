@@ -1,0 +1,15 @@
+{
+  "version": "0.4.1",
+  "date": "2026-06-21",
+  "url": "https://github.com/craighulme/Vortex2plus2",
+  "title": "Hosted multiplayer bridge",
+  "summary": "Vortex2+2 now defaults to the hosted relay and license flow, with updated Vortex auth and movement packet handling.",
+  "changelog": [
+    "Updated browser multiplayer for the latest Vortex launch/auth flow.",
+    "Moved app-token verification out of the browser and into the hosted relay.",
+    "Updated movement/avatar packet handling for the current native protocol.",
+    "Added license-gated command/features support and command documentation.",
+    "Added gated fly, noclip, airwalk, and gravity/fall-speed commands.",
+    "Moved private local relay work out of the public tracked repo."
+  ]
+}
