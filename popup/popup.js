@@ -159,6 +159,8 @@ async function checkForUpdates() {
         const isNewer = compareVersions(latestVersion, CURRENT_VERSION) > 0;
         if (isNewer && dismissedUpdateVersion !== latestVersion) {
             renderUpdateCard(update, true);
+        } else if (!isNewer) {
+            renderUpdateCard(update, false);
         }
     } catch {
         updateCard.hidden = true;
