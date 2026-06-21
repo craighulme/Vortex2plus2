@@ -512,6 +512,7 @@ window._vortexRemotes = remotes;
 let myId = null;
 let ws = null;
 let broadcastTimer = null;
+let _broadcastOverride = null;
 let bridgeConfig = null;
 let launchInfo = null;
 let connectPromise = null;
@@ -732,7 +733,41 @@ function _currentLaunchAvatar() {
     });
 }
 
+function _joinAvatarOverride() {
+    try {
+        const raw = localStorage.getItem("v22JoinAvatar");
+        if (!raw) return null;
+        return _normalizeAvatarFields(JSON.parse(raw));
+    } catch (err) {
+        console.warn("[mp] ignored invalid join avatar override", err);
+        return null;
+    }
+}
+
+function _setJoinAvatarOverride(patch = {}) {
+    if (!_hasLicenseFeature("avatar-spoof")) throw new Error("avatar spoofing is not enabled on this license");
+    const next = _normalizeAvatarFields({ ..._currentLaunchAvatar(), ...patch });
+    localStorage.setItem("v22JoinAvatar", JSON.stringify(next));
+    return next;
+}
+
+function _clearJoinAvatarOverride() {
+    localStorage.removeItem("v22JoinAvatar");
+    return true;
+}
+
+function _applyJoinAvatarToLaunchInfo(avatar) {
+    if (!avatar || !launchInfo) return null;
+    launchInfo.shirtId = avatar.shirt_id;
+    launchInfo.pantId = avatar.pant_id;
+    launchInfo.bodyType = avatar.body_type;
+    launchInfo.bodyColors = avatar.body_colors;
+    launchInfo.faceId = avatar.face_id;
+    return avatar;
+}
+
 function _setOutboundAvatar(patch = {}, rememberOriginal = true, options = {}) {
+    if (!_hasLicenseFeature("avatar-spoof")) throw new Error("avatar spoofing is not enabled on this license");
     if (!launchInfo) throw new Error("not connected yet");
     if (rememberOriginal && !_packetDebug.originalAvatar) _packetDebug.originalAvatar = _currentLaunchAvatar();
     const next = _normalizeAvatarFields({ ..._currentLaunchAvatar(), ...patch });
@@ -757,9 +792,160 @@ function _setOutboundAvatar(patch = {}, rememberOriginal = true, options = {}) {
         while (_packetDebug.pendingSpoofs.length > 40) _packetDebug.pendingSpoofs.shift();
     }
     if (hubMode && bridgeOpen()) {
-        ws.send(JSON.stringify({ type: "spoof_avatar", flush: options.flush !== false, ...next }));
+        if (options.persistFormat) {
+            ws.send(JSON.stringify({ type: "set_movement_format", format: options.persistFormat }));
+        } else if (options.persistCompact) {
+            ws.send(JSON.stringify({ type: "set_movement_format", format: "compact" }));
+        }
+        ws.send(JSON.stringify({ type: options.compact ? "spoof_avatar_compact" : "spoof_avatar", flush: options.flush !== false, ...next }));
     }
     return next;
+}
+
+function _setMovementFormat(format = "native-auto") {
+    const requested = String(format || "").toLowerCase();
+    const next = requested === "compact" ? "compact"
+        : requested === "lite" || requested === "legacy-lite" || requested === "native-lite" || requested === "no-pants" ? "native-lite"
+        : requested === "legacy" || requested === "full" || requested === "native-full" ? "native-full"
+        : "native-auto";
+    if (hubMode && bridgeOpen()) {
+        ws.send(JSON.stringify({ type: "set_movement_format", format: next }));
+    }
+    return next;
+}
+
+function _currentState(anim = "idle") {
+    const char = _vortex.getCharacter?.();
+    if (!char) return null;
+    let ry = char.rotation.y % (2 * Math.PI);
+    if (ry > Math.PI) ry -= 2 * Math.PI;
+    else if (ry < -Math.PI) ry += 2 * Math.PI;
+    return {
+        type: "state",
+        x: char.position.x,
+        y: _sceneYToNativeY(char.position.y),
+        z: char.position.z,
+        ry,
+        anim
+    };
+}
+
+function _stateAtScenePosition(pos, ry, anim = "idle") {
+    return {
+        type: "state",
+        x: Number(pos.x || 0),
+        y: _sceneYToNativeY(Number(pos.y || 0)),
+        z: Number(pos.z || 0),
+        ry: Number(ry || 0),
+        anim
+    };
+}
+
+function _sendStateBurst(state, count = 3, intervalMs = 50) {
+    const total = Math.max(1, Math.min(12, Number(count) || 3));
+    const gap = Math.max(20, Math.min(250, Number(intervalMs) || 50));
+    for (let i = 0; i < total; i += 1) {
+        setTimeout(() => bridgeSend(state), i * gap);
+    }
+}
+
+function _holdBroadcastState(state, durationMs) {
+    _broadcastOverride = {
+        state,
+        until: performance.now() + Math.max(50, Math.min(5000, Number(durationMs) || 250))
+    };
+}
+
+function _spoofAvatarResync(patch = {}, options = {}) {
+    const delayMs = Math.max(1000, Math.min(15000, Number(options.delayMs ?? options.delay ?? 8000) || 8000));
+    const next = _setOutboundAvatar(patch || {}, true, {
+        persistFormat: options.firstFormat || "native-lite",
+        rebuild: options.rebuild !== false,
+        applyLocal: options.applyLocal !== false,
+        measure: !!options.measure
+    });
+    setTimeout(() => {
+        _setMovementFormat(options.finalFormat || "native-auto");
+        if (hubMode && bridgeOpen()) {
+            ws.send(JSON.stringify({ type: "spoof_avatar", flush: true, ...next }));
+        }
+    }, delayMs);
+    return { ...next, resync_delay_ms: delayMs };
+}
+
+function _spoofAvatarDropResync(patch = {}, options = {}) {
+    const delayMs = Math.max(3000, Math.min(20000, Number(options.delayMs ?? options.delay ?? 8000) || 8000));
+    const next = _setOutboundAvatar(patch || {}, true, {
+        compact: true,
+        persistCompact: true,
+        rebuild: options.rebuild !== false,
+        applyLocal: options.applyLocal !== false,
+        measure: !!options.measure
+    });
+    setTimeout(() => {
+        _setMovementFormat(options.finalFormat || "native-auto");
+        if (hubMode && bridgeOpen()) {
+            ws.send(JSON.stringify({ type: "spoof_avatar", flush: true, ...next }));
+        }
+    }, delayMs);
+    return {
+        ...next,
+        drop_resync: true,
+        drop_format: "compact",
+        final_format: options.finalFormat || "native-auto",
+        delay_ms: delayMs
+    };
+}
+
+function _spoofAvatarReset(patch = {}, options = {}) {
+    if (!hubMode || !bridgeOpen()) throw new Error("avatar reset sync requires the local relay connection");
+    const char = _vortex.getCharacter?.();
+    if (!char) throw new Error("character is not ready");
+
+    const original = _currentState("idle");
+    const spawn = _vortex.getSpawn?.() || { x: 0, y: char.position.y - _sceneFootOffset(), z: 0, ry: char.rotation.y };
+    const spawnScene = {
+        x: Number(options.x ?? spawn.x ?? 0),
+        y: Number(options.y ?? ((spawn.y ?? 0) + _sceneFootOffset())),
+        z: Number(options.z ?? spawn.z ?? 0)
+    };
+    const spawnState = _stateAtScenePosition(spawnScene, Number(spawn.ry ?? original.ry ?? char.rotation.y), "jump");
+    const burst = Math.max(1, Math.min(10, Number(options.burst ?? 4) || 4));
+    const intervalMs = Math.max(25, Math.min(250, Number(options.intervalMs ?? 60) || 60));
+    const returnDelayMs = Math.max(80, Math.min(3000, Number(options.returnDelayMs ?? options.delayMs ?? 260) || 260));
+    const keepCompact = !!options.keepCompact;
+
+    const next = _setOutboundAvatar(patch || {}, true, {
+        compact: true,
+        persistCompact: true,
+        rebuild: options.rebuild !== false,
+        applyLocal: options.applyLocal !== false,
+        measure: !!options.measure
+    });
+
+    _setMovementFormat("compact");
+    _holdBroadcastState(spawnState, returnDelayMs);
+    _sendStateBurst(spawnState, burst, intervalMs);
+    setTimeout(() => {
+        if (original) _holdBroadcastState({ ...original, anim: "idle" }, intervalMs * burst + 80);
+        if (original) _sendStateBurst({ ...original, anim: "idle" }, burst, intervalMs);
+        if (!keepCompact) {
+            setTimeout(() => _setMovementFormat("legacy"), Math.max(80, intervalMs * burst));
+        }
+    }, returnDelayMs);
+
+    return {
+        ...next,
+        reset_sync: true,
+        spawn: { x: spawnState.x, y: spawnState.y, z: spawnState.z },
+        burst,
+        return_delay_ms: returnDelayMs,
+        keep_compact: keepCompact
+    };
+}
+
+function _spoofAvatarRejoin(patch = {}, options = {}) {
+    throw new Error("avatar rejoin is disabled: native server treats the reopened UDP socket as another window");
 }
 
 function _randInt(min, max) {
@@ -880,25 +1066,60 @@ function _sendProbe(options = {}) {
 
 window.VortexPacketDebug = {
     enable(value = true) {
+        if (!_hasLicenseFeature("packet-debug")) throw new Error("packet debug is not enabled on this license");
         _packetDebug.enabled = !!value;
         localStorage.setItem("v22PacketDebug", _packetDebug.enabled ? "1" : "0");
         return _packetDebug.enabled;
     },
     table() {
+        if (!_hasLicenseFeature("packet-debug")) throw new Error("packet debug is not enabled on this license");
         console.table([..._packetDebug.players.values()]);
         return [..._packetDebug.players.values()];
     },
     players() {
+        if (!_hasLicenseFeature("packet-debug")) throw new Error("packet debug is not enabled on this license");
         return [..._packetDebug.players.values()];
     },
     last(id) {
+        if (!_hasLicenseFeature("packet-debug")) throw new Error("packet debug is not enabled on this license");
         return _packetDebug.players.get(Number(id));
     },
     history() {
+        if (!_hasLicenseFeature("packet-debug")) throw new Error("packet debug is not enabled on this license");
         return [..._packetDebug.history];
+    },
+    setJoinAvatar(patch = {}) {
+        return _setJoinAvatarOverride(patch || {});
+    },
+    getJoinAvatar() {
+        return _joinAvatarOverride();
+    },
+    clearJoinAvatar() {
+        return _clearJoinAvatarOverride();
+    },
+    setJoinOutfit(patch = {}) {
+        return _setJoinAvatarOverride(patch || {});
     },
     spoofAvatar(patch) {
         return _setOutboundAvatar(patch || {});
+    },
+    spoofAvatarCompact(patch, options = {}) {
+        return _setOutboundAvatar(patch || {}, true, { ...options, compact: true, persistCompact: !!options.persist });
+    },
+    spoofAvatarResync(patch, options = {}) {
+        return _spoofAvatarResync(patch || {}, options);
+    },
+    spoofAvatarDropResync(patch, options = {}) {
+        return _spoofAvatarDropResync(patch || {}, options);
+    },
+    spoofAvatarReset(patch, options = {}) {
+        return _spoofAvatarReset(patch || {}, options);
+    },
+    spoofAvatarRejoin(patch, options = {}) {
+        return _spoofAvatarRejoin(patch || {}, options);
+    },
+    setMovementFormat(format = "native-auto") {
+        return _setMovementFormat(format);
     },
     spoofShirt(id) {
         return _setOutboundAvatar({ shirt_id: Number(id) || 0 });
@@ -1023,12 +1244,13 @@ function _wsEndpoint(raw) {
 
 async function verifyLaunchToken(cfg) {
     const requestedClientToken = randomHexToken();
+    const headers = {
+        "X-Client-Token": requestedClientToken
+    };
     const res = await fetch(`/api/verify-launch?token=${encodeURIComponent(cfg.launchToken)}`, {
         credentials: "include",
         cache: "no-store",
-        headers: {
-            "X-Client-Token": requestedClientToken
-        }
+        headers
     });
     if (!res.ok) {
         let detail = "";
@@ -1046,13 +1268,47 @@ async function verifyLaunchToken(cfg) {
         bodyType: _strField(raw, ["body_type", "bodyType"], "male"),
         bodyColors: Array.isArray(raw?.body_colors) ? raw.body_colors : (Array.isArray(raw?.bodyColors) ? raw.bodyColors : []),
         faceId: _numField(raw, ["face_id", "faceId"], 0),
-        clientToken: _strField(raw, ["client_token", "clientToken", "token"], cfg.launchToken),
-        appToken: _strField(raw, ["app_token", "appToken"], ""),
+        clientToken: _strField(raw, ["client_token", "clientToken"], ""),
         requestedClientToken,
         wsEndpoint: _wsEndpoint(raw)
     };
     if (!info.id) throw new Error("verify-launch response did not expose a player id");
     return info;
+}
+
+function launchInfoFromBridgeIdentity(cfg) {
+    const raw = cfg?.identity;
+    if (!raw || typeof raw !== "object") return null;
+    const info = {
+        raw,
+        id: _numField(raw, ["id", "user_id", "userId", "player_id", "playerId"], 0),
+        username: _strField(raw, ["username", "name", "display_name", "displayName"], "BrowserPlayer"),
+        gameId: _numField(raw, ["game_id", "gameId", "game"], Number(cfg.officialGameId || window.GAME_ID || 0)),
+        shirtId: _numField(raw, ["shirt_id", "shirtId"], 0),
+        pantId: _numField(raw, ["pant_id", "pantId"], 0),
+        bodyType: _strField(raw, ["body_type", "bodyType"], "male"),
+        bodyColors: Array.isArray(raw?.body_colors) ? raw.body_colors : (Array.isArray(raw?.bodyColors) ? raw.bodyColors : []),
+        faceId: _numField(raw, ["face_id", "faceId"], 0),
+        clientToken: _strField(raw, ["client_token", "clientToken"], ""),
+        requestedClientToken: "",
+        wsEndpoint: null,
+        licenseLease: raw.licenseLease || raw.license_lease || raw.lease || null
+    };
+    info.licenseFeatures = Array.isArray(info.licenseLease?.allowed_features) ? info.licenseLease.allowed_features : [];
+    return info.id ? info : null;
+}
+
+function _hasLicenseFeature(feature) {
+    if (!feature) return true;
+    if (!launchInfo?.licenseLease) return true;
+    return Array.isArray(launchInfo.licenseFeatures) && launchInfo.licenseFeatures.includes(feature);
+}
+
+function _requireLicenseFeature(feature, label) {
+    if (_hasLicenseFeature(feature)) return true;
+    const name = label || feature;
+    try { Chat.warn(`${name} is not enabled on this license.`); } catch { }
+    return false;
 }
 
 function _parseMovementRecord(buffer, offset, hasPacketType) {
@@ -1070,7 +1326,7 @@ function _parseMovementRecord(buffer, offset, hasPacketType) {
     if (!_textOk(name)) return null;
 
     const foffNoNul = nameOff + nameLen;
-    const offsets = [foffNoNul + 1, foffNoNul + 2, foffNoNul];
+    const offsets = [foffNoNul, foffNoNul + 1, foffNoNul + 2];
     let best = null;
     for (const foff of offsets) {
         if (foff + 18 > view.byteLength) continue;
@@ -1080,9 +1336,17 @@ function _parseMovementRecord(buffer, offset, hasPacketType) {
         const yaw = view.getFloat32(foff + 12, true);
         if (![x, y, z, yaw].every(Number.isFinite)) continue;
         if (Math.abs(x) > 1000000 || Math.abs(y) > 1000000 || Math.abs(z) > 1000000) continue;
-        const hasModernTail = foff + 63 <= view.byteLength && view.getUint8(foff + 22) === 1;
-        const avatar = _readPacketAvatar(view, foff);
-        if (hasModernTail && !avatar.valid) continue;
+        const parsedAvatar = _readPacketAvatar(view, foff);
+        const avatar = parsedAvatar.recordBytes && !parsedAvatar.valid ? {
+            shirtId: 0,
+            pantId: 0,
+            bodyType: "male",
+            bodyColors: [],
+            faceId: 0,
+            hasAvatar: false,
+            valid: true,
+            recordBytes: parsedAvatar.recordBytes
+        } : parsedAvatar;
         const rec = {
             id, game, name, x, y, z, yaw,
             state0: view.getUint8(foff + 16),
@@ -1090,13 +1354,14 @@ function _parseMovementRecord(buffer, offset, hasPacketType) {
             animTime: foff + 22 <= view.byteLength ? view.getFloat32(foff + 18, true) : 0,
             ...avatar,
             floatOffset: foff,
-            recordBytes: hasModernTail ? 63 : (foff + 55 <= view.byteLength ? 55 : 22)
+            recordBytes: avatar.recordBytes || 22
         };
         let score = 0;
         if (rec.state0 <= 1 && rec.state1 <= 1) score += 100;
         if (Math.abs(rec.yaw) <= 8) score += 20;
-        if (foff === foffNoNul + 1) score += 4;
-        else if (foff === foffNoNul + 2) score += 2;
+        if (foff === foffNoNul + 1 && view.getUint8(foffNoNul) === 0) score += 10;
+        else if (foff === foffNoNul) score += 8;
+        else if (foff === foffNoNul + 1) score += 2;
         if (!best || score > best.score) best = { rec, score };
     }
     return best?.rec || null;
@@ -1114,9 +1379,54 @@ function _readPacketAvatar(view, foff) {
         bodyColors: [],
         faceId: 0,
         hasAvatar: false,
-        valid: true
+        valid: true,
+        recordBytes: 0
     };
-    if (foff + 63 <= view.byteLength && view.getUint8(foff + 22) === 1) {
+    const legacyBodyType = foff + 63 <= view.byteLength ? view.getUint8(foff + 27) : 0;
+    if (foff + 59 <= view.byteLength &&
+        view.getUint8(foff + 22) === 1 &&
+        legacyBodyType !== 1 &&
+        legacyBodyType !== 2) {
+        avatar.shirtId = view.getUint32(foff + 23, true);
+        const colors = [];
+        let off = foff + 29;
+        for (let i = 0; i < 6; i += 1) {
+            colors.push(_packetColorHex(view.getUint32(off, true)));
+            off += 4;
+        }
+        avatar.bodyColors = colors;
+        const bodyTypeByte = view.getUint8(off);
+        avatar.bodyType = bodyTypeByte === 2 ? "female" : "male";
+        avatar.faceId = view.getUint32(off + 1, true);
+        avatar.valid = (bodyTypeByte === 1 || bodyTypeByte === 2) &&
+            avatar.shirtId >= 0 && avatar.shirtId < 1000 &&
+            avatar.faceId >= 0 && avatar.faceId < 1000;
+        avatar.hasAvatar = avatar.valid;
+        avatar.recordBytes = 59;
+    } else {
+    const compactBodyType = foff + 55 <= view.byteLength ? view.getUint8(foff + 49) : 0;
+    if (foff + 55 <= view.byteLength &&
+        view.getUint8(foff + 24) === 0 &&
+        (compactBodyType === 1 || compactBodyType === 2)) {
+        avatar.shirtId = view.getUint8(foff + 22);
+        avatar.pantId = view.getUint8(foff + 23);
+        const colors = [];
+        let off = foff + 25;
+        for (let i = 0; i < 6; i += 1) {
+            colors.push(_packetColorHex(view.getUint32(off, true)));
+            off += 4;
+        }
+        avatar.bodyColors = colors;
+        const bodyTypeByte = compactBodyType;
+        avatar.bodyType = bodyTypeByte === 2 ? "female" : "male";
+        avatar.faceId = view.getUint32(off + 1, true);
+        avatar.valid = (bodyTypeByte === 1 || bodyTypeByte === 2) &&
+            avatar.shirtId >= 0 && avatar.shirtId < 255 &&
+            avatar.pantId >= 0 && avatar.pantId < 255 &&
+            avatar.faceId >= 0 && avatar.faceId < 1000;
+        avatar.hasAvatar = avatar.valid;
+        avatar.recordBytes = 55;
+    } else if (foff + 63 <= view.byteLength && view.getUint8(foff + 22) === 1) {
         const firstId = view.getUint32(foff + 23, true);
         avatar.shirtId = firstId;
         avatar.pantId = view.getUint32(foff + 28, true);
@@ -1135,6 +1445,7 @@ function _readPacketAvatar(view, foff) {
             avatar.pantId >= 0 && avatar.pantId < 1000 &&
             avatar.faceId >= 0 && avatar.faceId < 1000;
         avatar.hasAvatar = avatar.valid;
+        avatar.recordBytes = 63;
     } else if (foff + 55 <= view.byteLength) {
         avatar.shirtId = view.getUint8(foff + 22);
         avatar.pantId = view.getUint8(foff + 23);
@@ -1153,10 +1464,12 @@ function _readPacketAvatar(view, foff) {
             avatar.pantId >= 0 && avatar.pantId < 1000 &&
             avatar.faceId >= 0 && avatar.faceId < 1000;
         avatar.hasAvatar = avatar.valid;
+        avatar.recordBytes = 55;
     } else if (foff + 27 <= view.byteLength && view.getUint8(foff + 22) === 1) {
         avatar.faceId = view.getUint32(foff + 23, true);
     } else if (foff + 26 <= view.byteLength) {
         avatar.shirtId = view.getUint32(foff + 22, true);
+    }
     }
     if (avatar.shirtId < 0 || avatar.shirtId >= 1000) avatar.shirtId = 0;
     if (avatar.pantId < 0 || avatar.pantId >= 1000) avatar.pantId = 0;
@@ -1262,7 +1575,7 @@ function _packetColorInt(color) {
 
 function _encodeMovementPacket(data) {
     const nameBytes = new TextEncoder().encode(launchInfo.username);
-    const len = 4 + 8 + 8 + 8 + nameBytes.length + 1 + 16 + 2 + 4 + 41;
+    const len = 4 + 8 + 8 + 8 + nameBytes.length + 16 + 2 + 4 + 34;
     const buffer = new ArrayBuffer(len);
     const view = new DataView(buffer);
     let off = 0;
@@ -1271,7 +1584,6 @@ function _encodeMovementPacket(data) {
     _writeU64(view, off, launchInfo.gameId); off += 8;
     _writeU64(view, off, nameBytes.length); off += 8;
     new Uint8Array(buffer, off, nameBytes.length).set(nameBytes); off += nameBytes.length;
-    view.setUint8(off, 0); off += 1;
     view.setFloat32(off, Number(data.x || 0), true); off += 4;
     view.setFloat32(off, Number(data.y || 0), true); off += 4;
     view.setFloat32(off, Number(data.z || 0), true); off += 4;
@@ -1285,10 +1597,9 @@ function _encodeMovementPacket(data) {
     const bodyType = String(launchInfo.bodyType || "male").toLowerCase() === "female" ? 2 : 1;
     const shirtId = Number(launchInfo.shirtId || 0) || 0;
     const faceId = Number(launchInfo.faceId || 0) || 0;
-    view.setUint8(off, 1); off += 1;
-    view.setUint32(off, shirtId, true); off += 4;
-    view.setUint8(off, bodyType); off += 1;
-    view.setUint32(off, Number(launchInfo.pantId || 0) || 0, true); off += 4;
+    view.setUint8(off, Math.max(0, Math.min(255, shirtId))); off += 1;
+    view.setUint8(off, Math.max(0, Math.min(255, Number(launchInfo.pantId || 0) || 0))); off += 1;
+    view.setUint8(off, 0); off += 1;
     view.setUint8(off, 0); off += 1;
     for (let i = 0; i < 6; i += 1) {
         view.setUint32(off, _packetColorInt(colors[i]), true);
@@ -1404,6 +1715,7 @@ async function connect() {
 async function connectOnce() {
     const cfg = getBridgeConfig();
     const localRelay = cfg.hubUrl && _isLocalRelayUrl(cfg.hubUrl);
+    const hostedRelay = cfg.hubUrl && !localRelay;
     if (!cfg.launchToken) {
         Chat.system("Vortex2+2 multiplayer is offline: missing launch token.");
         return;
@@ -1411,16 +1723,25 @@ async function connectOnce() {
 
     try {
         if (!launchInfo) {
-            launchInfo = await verifyLaunchToken(cfg);
+            if (localRelay || hostedRelay) launchInfo = launchInfoFromBridgeIdentity(cfg);
+            if (!launchInfo && !hostedRelay) launchInfo = await verifyLaunchToken(cfg);
         }
     } catch (err) {
-        Chat.system(`Vortex2+2 multiplayer auth failed: ${err.message || err}`);
-        connectFinished = true;
-        return;
+        if (localRelay) {
+            launchInfo = launchInfoFromBridgeIdentity(cfg);
+            if (launchInfo) {
+                console.warn("[mp] verify-launch failed; using browser page identity for local relay", err);
+            }
+        }
+        if (!launchInfo) {
+            Chat.system(`Vortex2+2 multiplayer auth failed: ${err.message || err}`);
+            connectFinished = true;
+            return;
+        }
     }
 
-    if (cfg.hubUrl) {
-        hubMode = true;
+        if (cfg.hubUrl) {
+            hubMode = true;
         const hubUrl = new URL(cfg.hubUrl);
         if (!hubUrl.pathname || hubUrl.pathname === "/") hubUrl.pathname = "/ws";
         hubUrl.searchParams.set("game", String(localRelay ? (cfg.officialGameId || window.GAME_ID || 0) : launchInfo.gameId));
@@ -1444,10 +1765,20 @@ async function connectOnce() {
                 is_staff: false,
                 is_booster: false
             };
+            const joinAvatar = _hasLicenseFeature("avatar-spoof") ? _applyJoinAvatarToLaunchInfo(_joinAvatarOverride()) : null;
+            if (joinAvatar) {
+                hello.shirt_id = joinAvatar.shirt_id;
+                hello.pant_id = joinAvatar.pant_id;
+                hello.body_type = joinAvatar.body_type;
+                hello.body_colors = joinAvatar.body_colors;
+                hello.face_id = joinAvatar.face_id;
+            }
             if (localRelay) {
                 hello.launchToken = cfg.launchToken;
                 hello.clientToken = launchInfo?.clientToken || "";
-                hello.appToken = launchInfo?.appToken || "";
+            } else {
+                hello.launchToken = cfg.launchToken;
+                hello.licenseLease = launchInfo?.licenseLease || cfg.identity?.licenseLease || cfg.identity?.lease || null;
             }
             ws.send(JSON.stringify(hello));
         };
@@ -1705,16 +2036,21 @@ function removeBlocks(userid) {
 const url = new URL(document.URL);
 const gamei = url.searchParams.get("V22GameId");
 function decodeNetworkData(playerData, r) {
-    if (playerData.shirt_id !== undefined || playerData.pant_id !== undefined || playerData.body_colors !== undefined || playerData.face_id !== undefined) {
+    const hasAvatarField = playerData.shirt_id !== undefined ||
+        playerData.pant_id !== undefined ||
+        playerData.body_type !== undefined ||
+        playerData.body_colors !== undefined ||
+        playerData.face_id !== undefined;
+    if (hasAvatarField) {
         const avatarPatch = {};
-        if (playerData.shirt_id !== undefined && Number(playerData.shirt_id) > 0) avatarPatch.shirt_id = playerData.shirt_id;
-        if (playerData.pant_id !== undefined && Number(playerData.pant_id) > 0) avatarPatch.pant_id = playerData.pant_id;
+        if (playerData.shirt_id !== undefined) avatarPatch.shirt_id = Number(playerData.shirt_id) || 0;
+        if (playerData.pant_id !== undefined) avatarPatch.pant_id = Number(playerData.pant_id) || 0;
         if (playerData.body_type !== undefined) avatarPatch.body_type = playerData.body_type;
         if (Array.isArray(playerData.body_colors) && playerData.body_colors.length === 6) avatarPatch.body_colors = playerData.body_colors;
-        if (playerData.face_id !== undefined && Number(playerData.face_id) > 0) avatarPatch.face_id = playerData.face_id;
+        if (playerData.face_id !== undefined) avatarPatch.face_id = Number(playerData.face_id) || 0;
         const nextAvatar = _normalizeAvatarFields({ ...(r.avatar || {}), ...avatarPatch });
-        const prev = JSON.stringify(r.avatar || {});
-        const next = JSON.stringify(nextAvatar);
+        const prev = _avatarSignature(r.avatar || {});
+        const next = _avatarSignature(nextAvatar);
         if (prev !== next) {
             r.avatar = nextAvatar;
             if (r.meshes) _vortex.applyAvatarToMeshes?.(r.meshes, nextAvatar);
@@ -1825,7 +2161,6 @@ function handle(d) {
                     bodyColors: d.body_colors || [],
                     faceId: d.face_id || 0,
                     clientToken: "",
-                    appToken: "",
                     raw: d
                 };
             }
@@ -1904,6 +2239,12 @@ function handle(d) {
 
         case "probe_sent": {
             _recordProbeEvent({ type: "probe_sent", ...d });
+            break;
+        }
+
+        case "movement_format":
+        case "spoof_avatar_sent": {
+            _recordProbeEvent({ ...d });
             break;
         }
 
@@ -2149,6 +2490,13 @@ function startBroadcast() {
     if (broadcastTimer) return;
     broadcastTimer = setInterval(() => {
         if (!bridgeOpen()) return;
+        if (_broadcastOverride) {
+            if (performance.now() <= _broadcastOverride.until) {
+                bridgeSend(_broadcastOverride.state);
+                return;
+            }
+            _broadcastOverride = null;
+        }
         const char = _vortex.getCharacter();
         if (!char) return;
 
@@ -2359,6 +2707,7 @@ window._mpHandleChatCommand = function (text) {
     }
 
     if (command === "tp" || command === "teleport") {
+        if (!_requireLicenseFeature("teleport-commands", "::tp")) return true;
         const nums = parts.map(Number);
         if (nums.length < 3 || nums.slice(0, 3).some((n) => !Number.isFinite(n))) {
             Chat.warn("Usage: ::tp <x> <y> <z>");
@@ -2373,6 +2722,7 @@ window._mpHandleChatCommand = function (text) {
     }
 
     if (command === "goto" || command === "to") {
+        if (!_requireLicenseFeature("teleport-commands", "::goto")) return true;
         const found = _findCommandPlayer(rest);
         if (!found.player) {
             Chat.warn(found.error || "player not found");
@@ -2392,6 +2742,7 @@ window._mpHandleChatCommand = function (text) {
     }
 
     if (command === "bring") {
+        if (!_requireLicenseFeature("bring-command", "::bring")) return true;
         const found = _findCommandPlayer(rest);
         if (!found.player) {
             Chat.warn(found.error || "player not found");

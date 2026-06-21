@@ -90,6 +90,16 @@ function appendMeta(id, content) {
     document.documentElement.appendChild(meta);
 }
 
+function readLaunchIdentity(token) {
+    if (!token) return null;
+    try {
+        const raw = sessionStorage.getItem(`v22LaunchIdentity:${token}`);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
 function rewritePlayDocument(html) {
     const parsed = new DOMParser().parseFromString(html, "text/html");
 
@@ -111,11 +121,13 @@ function rewritePlayDocument(html) {
     document.documentElement.replaceWith(document.importNode(parsed.documentElement, true));
 
     appendMeta("_importedAssets", importedAssets);
+    const launchToken = url.searchParams.get("V22Token") || "";
     appendMeta("_vortexBridgeConfig", {
         officialGameId: Number(url.searchParams.get("VortexGameId") || 0),
         customGameId: url.searchParams.get("V22GameId"),
-        launchToken: url.searchParams.get("V22Token") || "",
-        hubUrl: url.searchParams.get("V22Hub") || ""
+        launchToken,
+        hubUrl: url.searchParams.get("V22Hub") || "",
+        identity: readLaunchIdentity(launchToken)
     });
 
     for (const scriptInfo of scripts) {

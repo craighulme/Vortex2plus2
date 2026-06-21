@@ -1,5 +1,14 @@
 (() => {
     const BTN_ID = "v22-play-browser-btn";
+    const HOSTED_LICENSE_API = "https://v22.irongiant.vip";
+    const LICENSE_HELP_MESSAGE = 'Vortex2+2 license key is invalid or not set.\nContact "quackduck." on Discord for access.';
+    const REQUESTED_FEATURES = [
+        "vortex-native-bridge",
+        "avatar-spoof",
+        "teleport-commands",
+        "bring-command",
+        "packet-debug"
+    ];
 
     function gameIdFromPath() {
         const match = location.pathname.match(/^\/games\/(\d+)(?:\/)?$/);
@@ -49,12 +58,74 @@
         return uri;
     }
 
-    async function getHubUrl() {
+    async function fetchJson(path) {
+        const res = await fetch(path, {
+            credentials: "include",
+            cache: "no-store",
+            headers: { accept: "application/json" }
+        });
+        if (!res.ok) return null;
+        try {
+            return await res.json();
+        } catch {
+            return null;
+        }
+    }
+
+    async function fetchLaunchIdentity(gameId) {
+        const [me, catalog] = await Promise.all([
+            fetchJson("/me"),
+            fetchJson("/api/catalog/init")
+        ]);
+        if (!me?.id) return null;
+        return {
+            id: Number(me.id) || 0,
+            username: String(me.username || me.name || "BrowserPlayer"),
+            gameId: Number(gameId) || 0,
+            shirtId: Number(catalog?.shirt_id ?? catalog?.shirtId ?? 0) || 0,
+            pantId: Number(catalog?.pant_id ?? catalog?.pantId ?? 0) || 0,
+            bodyType: String(catalog?.body_type ?? catalog?.bodyType ?? "male"),
+            bodyColors: Array.isArray(catalog?.body_colors) ? catalog.body_colors : [],
+            faceId: Number(catalog?.face_id ?? catalog?.faceId ?? 0) || 0
+        };
+    }
+
+    function mergeIdentity(local, verified, gameId) {
+        const out = { ...(local || {}) };
+        if (verified?.id) out.id = verified.id;
+        if (verified?.username) out.username = verified.username;
+        out.gameId = verified?.gameId || out.gameId || Number(gameId) || 0;
+        if (verified?.shirtId) out.shirtId = verified.shirtId;
+        if (verified?.pantId) out.pantId = verified.pantId;
+        if (verified?.bodyType) out.bodyType = verified.bodyType;
+        if (Array.isArray(verified?.bodyColors) && verified.bodyColors.length) out.bodyColors = verified.bodyColors;
+        if (verified?.faceId) out.faceId = verified.faceId;
+        if (verified?.clientToken) out.clientToken = verified.clientToken;
+        return out;
+    }
+
+    function storeLaunchIdentity(token, identity) {
+        if (!token || !identity) return;
+        try {
+            sessionStorage.setItem(`v22LaunchIdentity:${token}`, JSON.stringify(identity));
+        } catch {}
+    }
+
+    async function getStoredConfig() {
         const api = globalThis.chrome || globalThis.browser;
-        const fallback = "ws://127.0.0.1:27822/ws";
+        const fallback = {
+            hubUrl: "wss://v22-relay.116.203.155.30.sslip.io/ws",
+            licenseApiUrl: HOSTED_LICENSE_API,
+            licenseKey: ""
+        };
         if (!api?.storage?.sync) return fallback;
-        const stored = await api.storage.sync.get({ hubUrl: "" });
-        return String(stored.hubUrl || fallback).trim().replace(/^http:/, "ws:").replace(/^https:/, "wss:");
+        const stored = await api.storage.sync.get(fallback);
+        const storedHubUrl = String(stored.hubUrl || "").trim().replace(/^http:/, "ws:").replace(/^https:/, "wss:");
+        return {
+            hubUrl: isLocalRelayUrl(storedHubUrl) ? storedHubUrl : fallback.hubUrl,
+            licenseApiUrl: HOSTED_LICENSE_API,
+            licenseKey: String(stored.licenseKey || "").trim()
+        };
     }
 
     function isLocalRelayUrl(hubUrl) {
@@ -65,6 +136,61 @@
         } catch {
             return false;
         }
+    }
+
+    async function browserFingerprintHash() {
+        const api = globalThis.chrome || globalThis.browser;
+        let installId = "";
+        if (api?.storage?.local) {
+            const stored = await api.storage.local.get({ v22InstallId: "" });
+            installId = String(stored.v22InstallId || "");
+            if (!installId) {
+                installId = crypto.randomUUID ? crypto.randomUUID() : randomHex(16);
+                await api.storage.local.set({ v22InstallId: installId });
+            }
+        }
+        const material = [
+            installId,
+            navigator.userAgent || "",
+            navigator.platform || "",
+            (navigator.languages || []).join(","),
+            `${screen.width || 0}x${screen.height || 0}x${screen.colorDepth || 0}`
+        ].join("\n");
+        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
+        return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    function randomHex(bytes) {
+        const values = new Uint8Array(bytes);
+        crypto.getRandomValues(values);
+        return [...values].map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    async function activateLicense(config) {
+        if (!config.licenseKey) {
+            const err = new Error("missing license key");
+            err.code = "V22_LICENSE_INVALID";
+            throw err;
+        }
+        const res = await fetch(`${config.licenseApiUrl}/activate`, {
+            method: "POST",
+            cache: "no-store",
+            headers: { "content-type": "application/json", accept: "application/json" },
+            body: JSON.stringify({
+                license_key: config.licenseKey,
+                fingerprint_hash: await browserFingerprintHash(),
+                features: REQUESTED_FEATURES
+            })
+        });
+        const text = await res.text();
+        let raw = {};
+        try { raw = JSON.parse(text); } catch {}
+        if (!res.ok || !raw.lease) {
+            const err = new Error(`license activation failed: HTTP ${res.status}${raw.error ? " " + raw.error : ""}`);
+            err.code = "V22_LICENSE_INVALID";
+            throw err;
+        }
+        return raw.lease;
     }
 
     function launchLocalRelay(gameId) {
@@ -122,7 +248,8 @@
         btn.disabled = true;
         btn.textContent = "Preparing...";
         try {
-            const hubUrl = await getHubUrl();
+            const config = await getStoredConfig();
+            const hubUrl = config.hubUrl;
             if (isLocalRelayUrl(hubUrl)) {
                 btn.textContent = "Checking relay...";
                 const alreadyRunning = await waitForRelay(hubUrl, 900);
@@ -135,10 +262,23 @@
             }
 
             btn.textContent = "Fetching token...";
+            const identity = await fetchLaunchIdentity(gameId);
+            let mergedLicense = null;
             const launchUri = await fetchLaunchUri(gameId);
             const launch = new URL(launchUri);
             const token = launch.searchParams.get("token");
             if (!token) throw new Error("launch URI did not contain a token");
+            if (!isLocalRelayUrl(hubUrl)) {
+                if (!config.licenseKey) {
+                    const err = new Error("missing license key");
+                    err.code = "V22_LICENSE_INVALID";
+                    throw err;
+                }
+                mergedLicense = await activateLicense(config);
+            }
+            const merged = mergeIdentity(identity, null, gameId);
+            if (mergedLicense) merged.licenseLease = mergedLicense;
+            storeLaunchIdentity(token, merged);
 
             const playUrl = new URL(`/games/${gameId}`, location.origin);
             playUrl.searchParams.set("Play", "1");
@@ -147,7 +287,11 @@
             if (hubUrl) playUrl.searchParams.set("V22Hub", hubUrl);
             location.href = playUrl.toString();
         } catch (err) {
-            alert(`Vortex2+2 browser launch failed:\n${err.message || err}`);
+            if (err?.code === "V22_LICENSE_INVALID") {
+                alert(LICENSE_HELP_MESSAGE);
+            } else {
+                alert(`Vortex2+2 browser launch failed:\n${err.message || err}`);
+            }
             btn.disabled = false;
             btn.textContent = oldText;
         }

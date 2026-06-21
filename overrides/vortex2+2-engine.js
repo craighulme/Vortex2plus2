@@ -2413,6 +2413,7 @@ window._vortex = {
     getClimbState: () => climbState,
     getCharFootOffset: () => CHAR_FOOT_OFFSET,
     getCharHeight: () => CHAR_HEIGHT,
+    getSpawn: () => ({ ..._spawnPoint }),
     getAnimRest: () => anim.rest,
     keys,
     setSens(mult) {

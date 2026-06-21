@@ -1,23 +1,23 @@
 # Vortex2+2
-Vortex2+2 is an extension for [Vortex](https://playvortex.io/) to add many more features.
-Please join the [Vortex2+2 & AIS discord server](https://discord.gg/3Rphp3duKR) to get early releases and sneak peaks, and submit suggestions for vortex2+2 and AIS!
+## Access and auth
+
+Vortex2+2 browser multiplayer is license-gated. To get a key, or to request more authorisation for restricted commands, contact `quackduck.` on Discord.
+
+Hosted mode does not send user session tokens or browser cookies to Vortex2+2 servers. The extension uses the user's existing Vortex browser session locally to request a normal short-lived game authorisation token from Vortex, then sends that game authorisation token and the signed Vortex2+2 license lease to the hosted relay. The hosted relay verifies the game authorisation token server-side and keeps relay secrets out of the extension.
+
+Command access is documented in [COMMANDS_README.md](COMMANDS_README.md).
 
 ## Browser play
 
 This fork injects a `Play in Browser` button on `https://playvortex.io/games/{id}`. The button fetches the normal Vortex launch token with your existing browser login and opens the Vortex2+2 browser client.
 
-The official app now uses UDP for live multiplayer. Browser extensions cannot open UDP sockets, so live Vortex multiplayer uses a small local WebSocket-to-UDP relay.
+The official app now uses UDP for live multiplayer. Browser extensions cannot open UDP sockets, so live Vortex multiplayer uses a WebSocket-to-UDP relay. Public builds default to the hosted Vortex2+2 relay.
 
-Setup:
+Local relay mode is not the supported public setup. It is possible for private development or self-hosted/reverse-engineering work, but you must do that work yourself and provide your own local relay/runtime configuration.
 
-```bat
-Register-NativeBridgeProtocol.cmd
-Start-NativeBridge.cmd
-```
+~~Local relay launch scripts are no longer shipped as the public setup.~~
 
-`Register-NativeBridgeProtocol.cmd` registers `v22bridge://`, which lets the extension start the relay automatically. `Start-NativeBridge.cmd` starts the same relay manually. The relay does not launch or inject the native Vortex app; it verifies the short-lived browser launch token and talks to the current Vortex UDP server directly.
-
-The relay URL is `ws://127.0.0.1:27822/ws`. The extension popup should use that URL for live multiplayer.
+The historical local relay URL is `ws://127.0.0.1:27822/ws`, but public users should use the hosted default unless they are deliberately building and maintaining their own local relay.
 
 Credits:
 - Native UDP protocol research and browser multiplayer bridge by [@craighulme23](https://github.com/craighulme23)

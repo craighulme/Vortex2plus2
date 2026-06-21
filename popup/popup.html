@@ -6,7 +6,7 @@
   <style>
     body {
       width: 280px;
-      height: 400px;
+      min-height: 400px;
       padding: 10px;
       text-align: center;
       background-color: rgb(24, 24, 24);
@@ -19,6 +19,29 @@
       text-align: left;
     }
 
+    .mode-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .mode-tabs button {
+      border: 1px solid #343b49;
+      border-radius: 6px;
+      padding: 8px;
+      background: #171a21;
+      color: #dce3ef;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    .mode-tabs button.active {
+      border-color: #4c84ff;
+      background: #2f5fbf;
+      color: #fff;
+    }
+
     .setting-row label {
       display: block;
       margin-bottom: 6px;
@@ -26,7 +49,7 @@
       color: #cfcfcf;
     }
 
-    #hubUrl {
+    .setting-row input {
       width: 100%;
       box-sizing: border-box;
       padding: 7px;
@@ -36,9 +59,14 @@
       color: #fff;
     }
 
-    #localRelayBtn {
-      width: 100%;
+    .setting-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
       margin-top: 8px;
+    }
+
+    .setting-actions button {
       border: 0;
       border-radius: 6px;
       padding: 7px;
@@ -46,6 +74,10 @@
       color: #fff;
       font-weight: 600;
       cursor: pointer;
+    }
+
+    .mode-panel[hidden] {
+      display: none;
     }
 
     #hubStatus {
@@ -77,12 +109,24 @@
         </svg>
       </div>
 
-      <div class="setting-row">
-        <label for="hubUrl">Browser multiplayer hub URL</label>
-        <input id="hubUrl" placeholder="ws://127.0.0.1:27822/ws">
-        <button id="localRelayBtn" type="button">Use local relay</button>
-        <div id="hubStatus"></div>
+      <div class="mode-tabs">
+        <button id="hostedRelayBtn" type="button">Hosted</button>
+        <button id="localRelayBtn" type="button">Local</button>
       </div>
+
+      <div id="hostedPanel" class="setting-row mode-panel">
+        <label for="licenseKey">License key</label>
+        <input id="licenseKey" type="password" autocomplete="off" placeholder="Customer license key">
+      </div>
+
+      <div id="localPanel" class="mode-panel" hidden>
+        <div class="setting-row">
+          <label for="hubUrl">Local relay URL</label>
+          <input id="hubUrl" placeholder="ws://127.0.0.1:27822/ws">
+        </div>
+      </div>
+
+      <div id="hubStatus"></div>
 
       <style>
         .checkbox-wrapper-4 * {

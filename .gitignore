@@ -4,4 +4,24 @@ cloudflare-hub/node_modules/
 cloudflare-hub/.wrangler/
 native-relay/node_modules/
 native-relay/*.log
+native-relay/logs/
 native-relay/headless.json
+native-relay/native-token.txt
+native-relay/tools/capture-native-session-frida.py
+native-relay/tools/capture-native-session-frida.js
+native-relay/tools/capture-native-session-frida-spawn.py
+native-relay/Capture-NativeSessionFridaSpawn.ps1
+native-relay/Capture-NativeSessionFrida.ps1
+native-relay/WORKING_STATE.md
+
+# Private relay prototypes and reverse-engineering notes.
+native-relay/*
+!native-relay/
+!native-relay/Register-NativeBridgeProtocol.ps1
+native-relay/src/index.js
+native-relay/src/headless.js
+native-relay/PROTOCOL_NOTES_PRIVATE.md
+
+# Private Builds
+private-relay/
+/cloudflare-hub
