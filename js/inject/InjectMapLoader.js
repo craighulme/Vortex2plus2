@@ -9,7 +9,7 @@
 
   const script = document.createElement('script');
   script.src = scriptURL;
-  script.async = true;
+  script.async = false;
   script.type = 'text/javascript';
   document.documentElement.appendChild(script);
 })();

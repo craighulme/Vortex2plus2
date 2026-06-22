@@ -70,6 +70,102 @@ const overrides = new Map([
     ["multiplayer.js", "overrides/vortex2+2-multiplayer.js"]
 ]);
 
+let v22LaunchConfig = null;
+const v22BrokerSockets = new Map();
+
+function sameRelayPath(left, right) {
+    try {
+        const a = new URL(left);
+        const b = new URL(right);
+        const ap = a.pathname && a.pathname !== "/" ? a.pathname : "/ws";
+        const bp = b.pathname && b.pathname !== "/" ? b.pathname : "/ws";
+        return a.protocol === b.protocol && a.host === b.host && ap === bp;
+    } catch {
+        return false;
+    }
+}
+
+function brokerPost(socketId, op, payload = {}) {
+    window.postMessage({
+        v22Broker: true,
+        direction: "extension",
+        socketId,
+        op,
+        ...payload
+    }, location.origin);
+}
+
+function brokerSend(ws, message) {
+    let outbound = message;
+    try {
+        const parsed = typeof message === "string" ? JSON.parse(message) : null;
+        if (parsed?.type === "hello") {
+            parsed.launchToken = v22LaunchConfig?.token || "";
+            parsed.licenseLease = v22LaunchConfig?.identity?.licenseLease ||
+                v22LaunchConfig?.identity?.license_lease ||
+                v22LaunchConfig?.identity?.lease ||
+                null;
+            outbound = JSON.stringify(parsed);
+        }
+    } catch {}
+    ws.send(outbound);
+}
+
+function pageSafeIdentity(identity) {
+    if (!identity || typeof identity !== "object") return null;
+    const out = { ...identity };
+    const lease = out.licenseLease || out.license_lease || out.lease || null;
+    if (Array.isArray(lease?.allowed_features)) out.licenseFeatures = [...lease.allowed_features];
+    delete out.licenseLease;
+    delete out.license_lease;
+    delete out.lease;
+    delete out.clientToken;
+    delete out.client_token;
+    delete out.appToken;
+    delete out.app_token;
+    return out;
+}
+
+window.addEventListener("message", (event) => {
+    if (event.source !== window) return;
+    const msg = event.data;
+    if (!msg?.v22Broker || msg.direction !== "page") return;
+    const socketId = String(msg.socketId || "");
+    if (!socketId) return;
+
+    if (msg.op === "connect") {
+        if (!v22LaunchConfig?.token || !sameRelayPath(msg.url, v22LaunchConfig.hubUrl)) {
+            brokerPost(socketId, "error", { message: "blocked relay connection" });
+            brokerPost(socketId, "close", { code: 1008, reason: "blocked relay connection", wasClean: false });
+            return;
+        }
+        try {
+            const ws = new WebSocket(String(msg.url));
+            v22BrokerSockets.set(socketId, ws);
+            ws.onopen = () => brokerPost(socketId, "open");
+            ws.onmessage = (e) => brokerPost(socketId, "message", { data: e.data });
+            ws.onerror = () => brokerPost(socketId, "error", { message: "relay websocket error" });
+            ws.onclose = (e) => {
+                v22BrokerSockets.delete(socketId);
+                brokerPost(socketId, "close", { code: e.code, reason: e.reason, wasClean: e.wasClean });
+            };
+        } catch (err) {
+            brokerPost(socketId, "error", { message: String(err && err.message || err) });
+            brokerPost(socketId, "close", { code: 1006, reason: "connect failed", wasClean: false });
+        }
+        return;
+    }
+
+    const ws = v22BrokerSockets.get(socketId);
+    if (!ws) return;
+    if (msg.op === "send" && ws.readyState === WebSocket.OPEN) {
+        brokerSend(ws, msg.data);
+    } else if (msg.op === "close") {
+        try { ws.close(); } catch {}
+        v22BrokerSockets.delete(socketId);
+    }
+});
+
 function runtimeUrl(path) {
     return extensionApi.runtime.getURL(path);
 }
@@ -90,18 +186,42 @@ function appendMeta(id, content) {
     document.documentElement.appendChild(meta);
 }
 
-function readLaunchIdentity(token) {
-    if (!token) return null;
-    try {
-        const raw = sessionStorage.getItem(`v22LaunchIdentity:${token}`);
-        return raw ? JSON.parse(raw) : null;
-    } catch {
-        return null;
+async function readLaunchConfig(launchId) {
+    if (!launchId) return null;
+    const key = `v22Launch:${launchId}`;
+    const maxAgeMs = 5 * 60 * 1000;
+    if (extensionApi?.runtime?.sendMessage) {
+        try {
+            const res = await extensionApi.runtime.sendMessage({ type: "v22:takeLaunchConfig", launchId });
+            if (res?.ok && res.config) return res.config;
+        } catch {}
     }
+    try {
+        const raw = sessionStorage.getItem(key);
+        sessionStorage.removeItem(key);
+        const cfg = raw ? JSON.parse(raw) : null;
+        if (!cfg?.createdAt || Date.now() - Number(cfg.createdAt) <= maxAgeMs) return cfg;
+    } catch {
+    }
+    return null;
 }
 
-function rewritePlayDocument(html) {
+function stripLaunchParams() {
+    const clean = new URL(location.href);
+    clean.searchParams.delete("V22Launch");
+    clean.searchParams.delete("V22Token");
+    clean.searchParams.delete("V22Hub");
+    history.replaceState(history.state, document.title, clean.toString());
+}
+
+async function rewritePlayDocument(html) {
     const parsed = new DOMParser().parseFromString(html, "text/html");
+    const launchConfig = await readLaunchConfig(url.searchParams.get("V22Launch"));
+    v22LaunchConfig = launchConfig;
+    const launchToken = launchConfig?.token || "";
+    const hubUrl = launchConfig?.hubUrl || "";
+    const identity = launchConfig?.identity || null;
+    stripLaunchParams();
 
     for (const link of parsed.querySelectorAll("link[href]")) {
         const file = link.getAttribute("href").split("/").pop();
@@ -121,13 +241,13 @@ function rewritePlayDocument(html) {
     document.documentElement.replaceWith(document.importNode(parsed.documentElement, true));
 
     appendMeta("_importedAssets", importedAssets);
-    const launchToken = url.searchParams.get("V22Token") || "";
     appendMeta("_vortexBridgeConfig", {
         officialGameId: Number(url.searchParams.get("VortexGameId") || 0),
         customGameId: url.searchParams.get("V22GameId"),
-        launchToken,
-        hubUrl: url.searchParams.get("V22Hub") || "",
-        identity: readLaunchIdentity(launchToken)
+        launchToken: launchConfig?.brokered === false ? launchToken : "",
+        hubUrl,
+        brokered: Boolean(launchConfig && launchConfig.brokered !== false),
+        identity: pageSafeIdentity(identity)
     });
 
     for (const scriptInfo of scripts) {
@@ -146,7 +266,7 @@ if (play) {
         let html = await fetch(
             runtimeUrl("overrides/play.html")
         ).then(r => r.text());
-        rewritePlayDocument(html);
+        await rewritePlayDocument(html);
     }
     init().catch(err => {
         console.error("[Vortex2+2] play loader failed", err);

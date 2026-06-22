@@ -32,12 +32,34 @@ function applyPopupTheme(enabled) {
 }
 
 function storageGet(defaults, cb) {
-    const result = extensionApi.storage.sync.get(defaults, cb);
-    if (result && typeof result.then === 'function') result.then(cb);
+    const handleLocal = (localStored) => {
+        if (!extensionApi.storage.sync) {
+            cb(localStored);
+            return;
+        }
+        const syncResult = extensionApi.storage.sync.get(defaults, (syncStored) => {
+            const merged = {
+                ...syncStored,
+                ...Object.fromEntries(Object.entries(localStored).filter(([, value]) => value !== "" && value != null))
+            };
+            extensionApi.storage.local.set(merged, () => cb(merged));
+        });
+        if (syncResult && typeof syncResult.then === 'function') {
+            syncResult.then((syncStored) => {
+                const merged = {
+                    ...syncStored,
+                    ...Object.fromEntries(Object.entries(localStored).filter(([, value]) => value !== "" && value != null))
+                };
+                extensionApi.storage.local.set(merged, () => cb(merged));
+            });
+        }
+    };
+    const result = extensionApi.storage.local.get(defaults, handleLocal);
+    if (result && typeof result.then === 'function') result.then(handleLocal);
 }
 
 function storageSet(value, cb) {
-    const result = extensionApi.storage.sync.set(value, cb);
+    const result = extensionApi.storage.local.set(value, cb);
     if (result && typeof result.then === 'function') result.then(cb);
 }
 

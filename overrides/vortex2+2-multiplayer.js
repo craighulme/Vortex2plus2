@@ -607,8 +607,85 @@ function _isLocalRelayUrl(value) {
     }
 }
 
+class V22BrokeredSocket {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
+
+    constructor(url) {
+        this.url = String(url || "");
+        this.readyState = V22BrokeredSocket.CONNECTING;
+        this.onopen = null;
+        this.onmessage = null;
+        this.onclose = null;
+        this.onerror = null;
+        this._kicked = false;
+        this._id = randomHexToken(8);
+        this._listener = (event) => {
+            if (event.source !== window) return;
+            const msg = event.data;
+            if (!msg?.v22Broker || msg.direction !== "extension" || msg.socketId !== this._id) return;
+            if (msg.op === "open") {
+                this.readyState = V22BrokeredSocket.OPEN;
+                this.onopen?.({ type: "open", target: this });
+            } else if (msg.op === "message") {
+                this.onmessage?.({ type: "message", data: msg.data, target: this });
+            } else if (msg.op === "error") {
+                this.onerror?.({ type: "error", message: msg.message || "", target: this });
+            } else if (msg.op === "close") {
+                this.readyState = V22BrokeredSocket.CLOSED;
+                window.removeEventListener("message", this._listener);
+                this.onclose?.({
+                    type: "close",
+                    code: msg.code || 1000,
+                    reason: msg.reason || "",
+                    wasClean: Boolean(msg.wasClean),
+                    target: this
+                });
+            }
+        };
+        window.addEventListener("message", this._listener);
+        window.postMessage({
+            v22Broker: true,
+            direction: "page",
+            socketId: this._id,
+            op: "connect",
+            url: this.url
+        }, location.origin);
+    }
+
+    send(data) {
+        if (this.readyState !== V22BrokeredSocket.OPEN) throw new Error("brokered websocket is not open");
+        window.postMessage({
+            v22Broker: true,
+            direction: "page",
+            socketId: this._id,
+            op: "send",
+            data
+        }, location.origin);
+    }
+
+    close() {
+        if (this.readyState === V22BrokeredSocket.CLOSING || this.readyState === V22BrokeredSocket.CLOSED) return;
+        this.readyState = V22BrokeredSocket.CLOSING;
+        window.postMessage({
+            v22Broker: true,
+            direction: "page",
+            socketId: this._id,
+            op: "close"
+        }, location.origin);
+        setTimeout(() => {
+            if (this.readyState !== V22BrokeredSocket.CLOSING) return;
+            this.readyState = V22BrokeredSocket.CLOSED;
+            window.removeEventListener("message", this._listener);
+            this.onclose?.({ type: "close", code: 1000, reason: "", wasClean: true, target: this });
+        }, 1500);
+    }
+}
+
 function bridgeOpen() {
-    return ws && ws.readyState === WebSocket.OPEN;
+    return ws && (ws.readyState === WebSocket.OPEN || ws.readyState === V22BrokeredSocket.OPEN);
 }
 
 const _packetDebug = {
@@ -1312,13 +1389,14 @@ function launchInfoFromBridgeIdentity(cfg) {
         wsEndpoint: null,
         licenseLease: raw.licenseLease || raw.license_lease || raw.lease || null
     };
-    info.licenseFeatures = Array.isArray(info.licenseLease?.allowed_features) ? info.licenseLease.allowed_features : [];
+    info.licenseFeatures = Array.isArray(raw.licenseFeatures) ? raw.licenseFeatures :
+        (Array.isArray(info.licenseLease?.allowed_features) ? info.licenseLease.allowed_features : []);
     return info.id ? info : null;
 }
 
 function _hasLicenseFeature(feature) {
     if (!feature) return true;
-    if (!launchInfo?.licenseLease) return true;
+    if (!launchInfo?.licenseLease && !Array.isArray(launchInfo?.licenseFeatures)) return true;
     return Array.isArray(launchInfo.licenseFeatures) && launchInfo.licenseFeatures.includes(feature);
 }
 
@@ -1727,7 +1805,12 @@ function bridgeSend(payload) {
 
 async function connect() {
     if (connectFinished) return;
-    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+    if (ws && (
+        ws.readyState === WebSocket.CONNECTING ||
+        ws.readyState === WebSocket.OPEN ||
+        ws.readyState === V22BrokeredSocket.CONNECTING ||
+        ws.readyState === V22BrokeredSocket.OPEN
+    )) return;
     if (connectPromise) return connectPromise;
     connectPromise = connectOnce().finally(() => {
         connectPromise = null;
@@ -1739,7 +1822,8 @@ async function connectOnce() {
     const cfg = getBridgeConfig();
     const localRelay = cfg.hubUrl && _isLocalRelayUrl(cfg.hubUrl);
     const hostedRelay = cfg.hubUrl && !localRelay;
-    if (!cfg.launchToken) {
+    const brokeredRelay = hostedRelay && cfg.brokered !== false;
+    if (!cfg.launchToken && !brokeredRelay) {
         Chat.system("Vortex2+2 multiplayer is offline: missing launch token.");
         return;
     }
@@ -1762,14 +1846,19 @@ async function connectOnce() {
             return;
         }
     }
+    if (!launchInfo) {
+        Chat.system("Vortex2+2 multiplayer auth failed: missing launch identity.");
+        connectFinished = true;
+        return;
+    }
 
-        if (cfg.hubUrl) {
-            hubMode = true;
+    if (cfg.hubUrl) {
+        hubMode = true;
         const hubUrl = new URL(cfg.hubUrl);
         if (!hubUrl.pathname || hubUrl.pathname === "/") hubUrl.pathname = "/ws";
         hubUrl.searchParams.set("game", String(localRelay ? (cfg.officialGameId || window.GAME_ID || 0) : launchInfo.gameId));
         try { Chat.system(`Vortex2+2 connecting relay: ${hubUrl.host}`); } catch { }
-        ws = new WebSocket(hubUrl.toString());
+        ws = brokeredRelay ? new V22BrokeredSocket(hubUrl.toString()) : new WebSocket(hubUrl.toString());
 
         ws.onopen = () => {
             try { Chat.system("Vortex2+2 relay connected."); } catch { }
@@ -1799,7 +1888,7 @@ async function connectOnce() {
             if (localRelay) {
                 hello.launchToken = cfg.launchToken;
                 hello.clientToken = launchInfo?.clientToken || "";
-            } else {
+            } else if (!brokeredRelay) {
                 hello.launchToken = cfg.launchToken;
                 hello.licenseLease = launchInfo?.licenseLease || cfg.identity?.licenseLease || cfg.identity?.lease || null;
             }

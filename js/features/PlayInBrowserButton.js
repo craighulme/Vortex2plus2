@@ -108,11 +108,17 @@
         return out;
     }
 
-    function storeLaunchIdentity(token, identity) {
-        if (!token || !identity) return;
-        try {
-            sessionStorage.setItem(`v22LaunchIdentity:${token}`, JSON.stringify(identity));
-        } catch {}
+    async function storeLaunchConfig(config) {
+        const api = globalThis.chrome || globalThis.browser;
+        if (api?.runtime?.sendMessage) {
+            try {
+                const res = await api.runtime.sendMessage({ type: "v22:storeLaunchConfig", config });
+                if (res?.ok && res.launchId) return res.launchId;
+            } catch {}
+        }
+        const launchId = crypto.randomUUID ? crypto.randomUUID() : randomHex(16);
+        sessionStorage.setItem(`v22Launch:${launchId}`, JSON.stringify({ ...config, createdAt: Date.now() }));
+        return launchId;
     }
 
     async function getStoredConfig() {
@@ -122,8 +128,18 @@
             licenseApiUrl: HOSTED_LICENSE_API,
             licenseKey: ""
         };
-        if (!api?.storage?.sync) return fallback;
-        const stored = await api.storage.sync.get(fallback);
+        if (!api?.storage?.local) return fallback;
+        let stored = await api.storage.local.get(fallback);
+        if ((!stored.hubUrl || !stored.licenseKey) && api.storage.sync) {
+            try {
+                const synced = await api.storage.sync.get(fallback);
+                stored = {
+                    ...synced,
+                    ...Object.fromEntries(Object.entries(stored).filter(([, value]) => value !== "" && value != null))
+                };
+                await api.storage.local.set(stored);
+            } catch {}
+        }
         const storedHubUrl = String(stored.hubUrl || "").trim().replace(/^http:/, "ws:").replace(/^https:/, "wss:");
         return {
             hubUrl: isLocalRelayUrl(storedHubUrl) ? storedHubUrl : fallback.hubUrl,
@@ -282,13 +298,17 @@
             }
             const merged = mergeIdentity(identity, null, gameId);
             if (mergedLicense) merged.licenseLease = mergedLicense;
-            storeLaunchIdentity(token, merged);
+            const launchId = await storeLaunchConfig({
+                token,
+                hubUrl,
+                identity: merged,
+                brokered: !isLocalRelayUrl(hubUrl)
+            });
 
             const playUrl = new URL(`/games/${gameId}`, location.origin);
             playUrl.searchParams.set("Play", "1");
             playUrl.searchParams.set("VortexGameId", String(gameId));
-            playUrl.searchParams.set("V22Token", token);
-            if (hubUrl) playUrl.searchParams.set("V22Hub", hubUrl);
+            playUrl.searchParams.set("V22Launch", launchId);
             location.href = playUrl.toString();
         } catch (err) {
             if (err?.code === "V22_LICENSE_INVALID") {

@@ -3,6 +3,7 @@ const REPO_URL = "https://github.com/craighulme/Vortex2plus2";
 const UPDATE_ALARM = "v22-update-check";
 const CHECK_INTERVAL_MINUTES = 240;
 const CACHE_MAX_AGE_MS = 60 * 60 * 1000;
+const LAUNCH_CONFIG_MAX_AGE_MS = 5 * 60 * 1000;
 
 const extensionApi = globalThis.chrome || globalThis.browser;
 
@@ -42,6 +43,45 @@ function storageSet(area, value) {
         const result = extensionApi.storage[area].set(value, resolve);
         if (result && typeof result.then === "function") result.then(resolve);
     });
+}
+
+function randomHex(bytes) {
+    const values = new Uint8Array(bytes);
+    crypto.getRandomValues(values);
+    return [...values].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function ephemeralStorageSet(key, value) {
+    if (extensionApi.storage.session) {
+        await storageSet("session", { [key]: value });
+        return;
+    }
+    await storageSet("local", { [key]: value });
+}
+
+async function ephemeralStorageTake(key) {
+    const area = extensionApi.storage.session ? "session" : "local";
+    const stored = await storageGet(area, { [key]: null });
+    try {
+        await extensionApi.storage[area].remove(key);
+    } catch {}
+    return stored?.[key] || null;
+}
+
+async function storeLaunchConfig(config) {
+    const launchId = crypto.randomUUID ? crypto.randomUUID() : randomHex(16);
+    await ephemeralStorageSet(`v22Launch:${launchId}`, {
+        ...(config || {}),
+        createdAt: Date.now()
+    });
+    return launchId;
+}
+
+async function takeLaunchConfig(launchId) {
+    if (!launchId) return null;
+    const config = await ephemeralStorageTake(`v22Launch:${launchId}`);
+    if (!config?.createdAt || Date.now() - Number(config.createdAt) > LAUNCH_CONFIG_MAX_AGE_MS) return null;
+    return config;
 }
 
 async function fetchUpdateManifest() {
@@ -90,7 +130,7 @@ async function getUpdateStatus(force = false) {
         return { ok: false, currentVersion: currentVersion(), isNewer: false };
     }
 
-    const dismissed = await storageGet("sync", { dismissedUpdateVersion: "" });
+    const dismissed = await storageGet("local", { dismissedUpdateVersion: "" });
     const latestVersion = String(update.version || "");
     const isNewer = compareVersions(latestVersion, currentVersion()) > 0;
     return {
@@ -132,8 +172,24 @@ extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
     if (message?.type === "v22:dismissUpdate" && message.version) {
-        storageSet("sync", { dismissedUpdateVersion: String(message.version) }).then(() => {
+        storageSet("local", { dismissedUpdateVersion: String(message.version) }).then(() => {
             sendResponse({ ok: true });
+        });
+        return true;
+    }
+    if (message?.type === "v22:storeLaunchConfig") {
+        storeLaunchConfig(message.config).then((launchId) => {
+            sendResponse({ ok: true, launchId });
+        }).catch((err) => {
+            sendResponse({ ok: false, error: String(err && err.message || err) });
+        });
+        return true;
+    }
+    if (message?.type === "v22:takeLaunchConfig") {
+        takeLaunchConfig(String(message.launchId || "")).then((config) => {
+            sendResponse({ ok: Boolean(config), config });
+        }).catch((err) => {
+            sendResponse({ ok: false, error: String(err && err.message || err) });
         });
         return true;
     }

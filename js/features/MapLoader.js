@@ -704,11 +704,37 @@ async function initialize() {
     }
 }
 
-function bootMapLoader() {
+function mapLoaderReady() {
+    return typeof window.addStud === "function" &&
+        typeof window.removeStud === "function" &&
+        typeof window.getCachedGeo === "function" &&
+        typeof window.getCachedMats === "function" &&
+        typeof window.removeMatching_array === "function" &&
+        typeof window.THREE !== "undefined" &&
+        !!window.THREE.BufferGeometryUtils &&
+        typeof window._vortex?.setSpawn === "function" &&
+        typeof window.scene !== "undefined" &&
+        typeof window.renderer !== "undefined" &&
+        Array.isArray(window.objects);
+}
+
+function bootMapLoader(attempt = 0) {
     if (window.__v22MapLoaderBooted) return;
+    if (!mapLoaderReady()) {
+        if (attempt === 0) console.info('waiting for Vortex engine before map loader');
+        if (attempt > 200) {
+            console.warn('map loader could not start: Vortex engine globals were not ready');
+            return;
+        }
+        setTimeout(() => bootMapLoader(attempt + 1), 50);
+        return;
+    }
     window.__v22MapLoaderBooted = true;
     console.info('initializing map loader');
-    initialize()
+    initialize().catch(err => {
+        window.__v22MapLoaderBooted = false;
+        console.warn('map loader initialization failed', err);
+    })
 
     let watermark = document.createElement('a')
     watermark.innerHTML = 'Vortex2+2 v0.4.0 by @inuk'

@@ -13,6 +13,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -30,6 +34,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -47,6 +55,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -64,6 +76,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -81,6 +97,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -98,6 +118,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -115,6 +139,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -132,6 +160,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -150,6 +182,10 @@
         "xmlhttprequest",
         "media",
         "other"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -167,6 +203,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -184,6 +224,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -201,6 +245,10 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -217,6 +265,10 @@
       "urlFilter": "Head1_diff.png",
       "resourceTypes": [
         "image"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -233,6 +285,10 @@
       "urlFilter": "styles.css",
       "resourceTypes": [
         "stylesheet"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   },
@@ -249,6 +305,10 @@
       "urlFilter": "BufferGeometryUtils.js",
       "resourceTypes": [
         "script"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
       ]
     }
   }

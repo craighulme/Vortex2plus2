@@ -1,15 +1,15 @@
 {
-  "version": "0.4.2",
-  "date": "2026-06-21",
+  "version": "0.4.3",
+  "date": "2026-06-22",
   "url": "https://github.com/craighulme/Vortex2plus2",
-  "title": "Hosted multiplayer bridge",
-  "summary": "Vortex2+2 now defaults to the hosted relay and license flow, with updated Vortex auth and movement packet handling.",
+  "title": "Extension hardening",
+  "summary": "Vortex2+2 now keeps hosted relay launch credentials in the extension layer, stores license settings locally, and narrows extension fetch/resource exposure.",
   "changelog": [
-    "Updated browser multiplayer for the latest Vortex launch/auth flow.",
-    "Moved app-token verification out of the browser and into the hosted relay.",
-    "Updated movement/avatar packet handling for the current native protocol.",
-    "Added license-gated command/features support and command documentation.",
-    "Added gated fly, noclip, airwalk, and gravity/fall-speed commands.",
-    "Moved private local relay work out of the public tracked repo."
+    "Moved Play in Browser launch handoff behind an extension-managed nonce instead of URL token parameters.",
+    "Moved hosted relay WebSocket ownership into the extension content script so page JS no longer receives the launch token.",
+    "Removed the third-party cors.io fetch bridge and restricted bridge fetches to known Vortex/update hosts.",
+    "Moved license and relay settings from Chrome Sync to local extension storage.",
+    "Restricted web-accessible extension assets and redirect rules to Vortex origins.",
+    "Kept existing local relay compatibility while tightening hosted relay credential handling."
   ]
 }

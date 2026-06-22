@@ -1,6 +1,6 @@
 {
   "name": "Vortex2+2",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "manifest_version": 3,
   "description": "An extension to make Vortex so much better.",
   "icons": {
@@ -69,16 +69,21 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "js/*",
-        "settings/*",
+        "js/features/MapLoader.js",
         "overrides/*",
+        "overrides/libs/*",
         "img/*",
-        "mdl/*",
-        "sounds/*",
-        "files/*"
+        "img/textures/*",
+        "img/games/website/icons/*",
+        "img/games/website/banners/*",
+        "files/*",
+        "files/meshes/*",
+        "files/sounds/*",
+        "files/mapdata/*"
       ],
       "matches": [
-        "<all_urls>"
+        "https://playvortex.io/*",
+        "https://vortex.towerstats.com/*"
       ]
     }
   ],
