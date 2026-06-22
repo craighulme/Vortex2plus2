@@ -28,16 +28,17 @@
         style.textContent = `
             #v22-update-notice{
                 position:fixed;right:18px;top:18px;z-index:2147483647;
-                width:min(360px,calc(100vw - 36px));box-sizing:border-box;
+                width:min(390px,calc(100vw - 36px));max-height:calc(100vh - 36px);box-sizing:border-box;
                 border:1px solid var(--linecol2, rgba(255,255,255,.16));border-radius:8px;
                 background:var(--bgcol2, #252525);color:var(--textcol1, #fff);
                 box-shadow:0 14px 40px rgba(0,0,0,.28);
                 font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-                text-align:left;padding:13px;
+                text-align:left;padding:13px;overflow:auto;
             }
             #v22-update-notice *{box-sizing:border-box}
             .v22-update-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
             .v22-update-title{font-size:14px;font-weight:760;line-height:1.25}
+            .v22-update-subtitle{margin:-2px 0 8px;color:var(--textcol1, #fff);font-size:13px;font-weight:720;line-height:1.25}
             .v22-update-pill{flex:0 0 auto;border-radius:999px;padding:3px 8px;background:var(--accentcol1, #098b4a);color:#fff;font-size:10px;font-weight:760;text-transform:uppercase}
             .v22-update-body{margin:0 0 9px;color:var(--textcol2, rgba(255,255,255,.74));font-size:12px;line-height:1.4}
             .v22-update-list{margin:0 0 11px;padding-left:17px;color:var(--textcol1, #fff);font-size:12px;line-height:1.35}
@@ -63,6 +64,7 @@
                 <div class="v22-update-title"></div>
                 <div class="v22-update-pill">New</div>
             </div>
+            <div class="v22-update-subtitle"></div>
             <p class="v22-update-body"></p>
             <ul class="v22-update-list"></ul>
             <div class="v22-update-actions">
@@ -71,9 +73,12 @@
             </div>
         `;
         card.querySelector(".v22-update-title").textContent = `Vortex2+2 ${latestVersion} is available`;
+        const subtitle = card.querySelector(".v22-update-subtitle");
+        subtitle.textContent = update.title || "";
+        subtitle.hidden = !update.title;
         card.querySelector(".v22-update-body").textContent = update.summary || "Open the repo for the latest version.";
         const list = card.querySelector(".v22-update-list");
-        const items = Array.isArray(update.changelog) ? update.changelog.slice(0, 4) : [];
+        const items = Array.isArray(update.changelog) ? update.changelog : [];
         for (const item of items) {
             const li = document.createElement("li");
             li.textContent = String(item);
