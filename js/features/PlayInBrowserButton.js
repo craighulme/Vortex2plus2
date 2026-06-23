@@ -206,8 +206,11 @@
         let raw = {};
         try { raw = JSON.parse(text); } catch {}
         if (!res.ok || !raw.lease) {
-            const err = new Error(`license activation failed: HTTP ${res.status}${raw.error ? " " + raw.error : ""}`);
+            const reason = String(raw.error || raw.message || `HTTP ${res.status}`);
+            const err = new Error(`license activation failed: ${reason}`);
             err.code = "V22_LICENSE_INVALID";
+            err.reason = reason;
+            err.status = res.status;
             throw err;
         }
         return raw.lease;
@@ -312,7 +315,11 @@
             location.href = playUrl.toString();
         } catch (err) {
             if (err?.code === "V22_LICENSE_INVALID") {
-                alert(LICENSE_HELP_MESSAGE);
+                const detail = err.reason ? `\n\nServer reason: ${err.reason}` : "";
+                const hint = /hwid/i.test(err.reason || "")
+                    ? "\n\nThis key appears locked to another browser/install fingerprint."
+                    : (/session_cap|cap|429/i.test(err.reason || "") ? "\n\nToo many active sessions are using this license. Wait for the old session to expire or revoke it server-side." : "");
+                alert(`${LICENSE_HELP_MESSAGE}${detail}${hint}`);
             } else {
                 alert(`Vortex Web browser launch failed:\n${err.message || err}`);
             }
