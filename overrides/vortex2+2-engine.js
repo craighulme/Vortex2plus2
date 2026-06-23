@@ -928,24 +928,6 @@ function getMovementMods() {
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 const cursorEl = document.getElementById('cursor');
-
-let leaveButton = document.createElement('span')
-leaveButton.innerHTML = 'Leave'
-overlay.appendChild(leaveButton);
-let yousure = false;
-leaveButton.onclick = function () {
-    if (yousure) {
-        window.location.href = "https://vortex.towerstats.com/";
-    } else {
-        yousure = true;
-        leaveButton.innerText = 'You sure?'
-        setTimeout(() => {
-            leaveButton.innerText = 'Leave'
-            yousure = false;
-        }, 2000);
-    }
-
-}
 Object.assign(overlay.style, {
     height: '100%',
     width: '100%',
@@ -953,7 +935,6 @@ Object.assign(overlay.style, {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '100px'
 });
 
 let cursorX = window.innerWidth / 2;
@@ -1454,9 +1435,11 @@ const settingsTargets = {
 };
 const settingsOutput = document.getElementById('vw-dev-output');
 const settingsStatus = document.getElementById('vw-session-status');
+const reloadNotice = document.getElementById('vw-reload-notice');
 const audioOutputSelect = document.getElementById('vw-audio-output');
 const audioInputSelect = document.getElementById('vw-audio-input');
 let settingsOpen = false;
+let reloadNoticeShown = false;
 
 function inferSettingsTarget(label) {
     const text = String(label || '').toLowerCase();
@@ -1480,6 +1463,7 @@ function setSettingsOpen(open, options = {}) {
     settingsOpen = !!open;
     settingsPanel.style.display = settingsOpen ? '' : 'none';
     settingsPanel.setAttribute('aria-hidden', settingsOpen ? 'false' : 'true');
+    document.body.classList.toggle('vw-menu-open', settingsOpen);
     if (settingsOpen) {
         refreshSettingsStatus();
         populateAudioDevices().catch(() => {});
@@ -1491,6 +1475,34 @@ function setSettingsOpen(open, options = {}) {
 
 function toggleSettingsMenu() {
     setSettingsOpen(!settingsOpen);
+}
+
+function gamePageUrl() {
+    const id = window.VortexRuntime?.platform?.bridgeConfig?.officialGameId || new URLSearchParams(location.search).get('VortexGameId') || 1;
+    return `https://playvortex.io/games/${encodeURIComponent(id)}`;
+}
+
+function leaveGame() {
+    window.location.href = gamePageUrl();
+}
+
+function showReloadNotice() {
+    reloadNoticeShown = true;
+    if (!reloadNotice) return;
+    reloadNotice.hidden = false;
+    settingsPanel.classList.add('has-reload-notice');
+}
+
+function hideReloadNotice() {
+    reloadNoticeShown = false;
+    if (!reloadNotice) return;
+    reloadNotice.hidden = true;
+    settingsPanel.classList.remove('has-reload-notice');
+}
+
+function reloadGamePage() {
+    localStorage.removeItem('v22RuntimeDevTools');
+    location.reload();
 }
 
 window.VortexMenu = {
@@ -1514,7 +1526,8 @@ settingsPanel.addEventListener('click', (event) => {
         resetCharacterToSpawn();
         refreshSettingsStatus();
     }
-    if (action === 'leave') window.location.href = 'https://playvortex.io/games/1';
+    if (action === 'leave') leaveGame();
+    if (action === 'reload-now') reloadGamePage();
 });
 
 document.addEventListener('keydown', (event) => {
@@ -1535,23 +1548,34 @@ document.addEventListener('pointerlockchange', () => {
 function refreshSettingsStatus() {
     if (!settingsStatus) return;
     const quality = window.VortexQuality?.get?.();
-    const rendererStats = renderer.info?.render || {};
-    const report = window.VortexPerf?.report?.();
-    const fps = report?.cadence?.estimatedPresentedFps || 0;
+    const pos = character?.position;
+    const health = typeof playerSpecialValues !== 'undefined' ? Math.max(0, Math.min(1, Number(playerSpecialValues.health ?? 1))) : 1;
+    const gameId = window.VortexRuntime?.platform?.bridgeConfig?.officialGameId || new URLSearchParams(location.search).get('VortexGameId') || '-';
+    const playerCount = document.querySelectorAll('#lb-body [data-player-id]').length || 1;
     const values = [
-        ['Renderer', renderer.capabilities?.isWebGL2 ? 'WebGL2' : 'WebGL'],
-        ['Draw Calls', String(rendererStats.calls ?? '-')],
-        ['Triangles', String(rendererStats.triangles ?? '-')],
-        ['FPS', fps ? String(fps) : '-'],
-        ['Runtime', window.VortexRuntime ? 'Enabled' : 'Legacy'],
+        ['Game', `#${gameId}`],
+        ['Players', String(playerCount)],
+        ['Health', `${Math.round(health * 100)}%`],
+        ['Position', pos ? `${Math.round(pos.x)}, ${Math.round(pos.y)}, ${Math.round(pos.z)}` : '-'],
+        ['Avatar', _avatarRenderer === 'modern' ? 'Modern' : 'Legacy'],
         ['Graphics', quality?.shadows ? 'Visual' : 'Performance'],
     ];
     settingsStatus.innerHTML = values.map(([label, value]) => `
         <div class="vw-status">
-            <div class="vw-status-label">${label}</div>
-            <div class="vw-status-value">${value}</div>
+            <div class="vw-status-label">${escapeMenuText(label)}</div>
+            <div class="vw-status-value">${escapeMenuText(value)}</div>
         </div>
     `).join('');
+}
+
+function escapeMenuText(value) {
+    return String(value).replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[char]));
 }
 
 function routeSettingsClickUnderCursor() {
@@ -1703,9 +1727,24 @@ function selectedAudioOutputId() {
     return localStorage.getItem('v22AudioOutput') || '';
 }
 
-function applyAudioOutputTo(audio) {
-    if (!audio || typeof audio.setSinkId !== 'function') return;
-    audio.setSinkId(selectedAudioOutputId()).catch(() => {});
+async function applyAudioOutputTo(audio) {
+    if (!audio || typeof audio.setSinkId !== 'function') return false;
+    try {
+        await audio.setSinkId(selectedAudioOutputId());
+        return true;
+    } catch (err) {
+        console.warn('[audio] output device apply failed', err);
+        return false;
+    }
+}
+
+function allGameAudio() {
+    return [gameSong, slashSound, clickSound, oofSound].filter(Boolean);
+}
+
+async function applyAudioOutputToAll() {
+    const results = await Promise.all(allGameAudio().map((audio) => applyAudioOutputTo(audio)));
+    return results.some(Boolean);
 }
 
 function applyAudioVolumes() {
@@ -1743,13 +1782,44 @@ async function populateAudioDevices() {
     fillSelect(audioInputSelect, 'audioinput', selectedInput, 'microphone');
 }
 
+async function requestMicrophoneDeviceList() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+        window.Chat?.warn?.('Microphone selection is not supported in this browser.');
+        return false;
+    }
+    let stream = null;
+    try {
+        const deviceId = localStorage.getItem('v22AudioInput') || undefined;
+        stream = await navigator.mediaDevices.getUserMedia({
+            audio: deviceId ? { deviceId: { exact: deviceId } } : true
+        });
+        await populateAudioDevices();
+        return true;
+    } catch (err) {
+        console.warn('[audio] microphone permission failed', err);
+        window.Chat?.warn?.('Microphone permission was not granted.');
+        return false;
+    } finally {
+        stream?.getTracks?.().forEach((track) => track.stop());
+    }
+}
+
+async function testAudioOutput() {
+    window.canPlaySounds = true;
+    applyAudioVolumes();
+    await applyAudioOutputTo(clickSound);
+    try {
+        clickSound.currentTime = 0;
+        await clickSound.play();
+    } catch (err) {
+        console.warn('[audio] test output failed', err);
+    }
+}
+
 if (audioOutputSelect) {
-    audioOutputSelect.onchange = () => {
+    audioOutputSelect.onchange = async () => {
         localStorage.setItem('v22AudioOutput', audioOutputSelect.value);
-        applyAudioOutputTo(gameSong);
-        applyAudioOutputTo(slashSound);
-        applyAudioOutputTo(clickSound);
-        applyAudioOutputTo(oofSound);
+        await applyAudioOutputToAll();
     };
 }
 
@@ -1778,6 +1848,12 @@ makeSettingsSlider('Chat volume', 0, 1, 1, 0.05, function (slider, val) {
     chatVolume = val;
 }, { target: settingsTargets.audio, formatter: volumeLabel });
 
+makeButtonRow([
+    { label: 'Refresh devices', onclick: () => populateAudioDevices().catch(() => {}) },
+    { label: 'Enable microphone list', onclick: () => requestMicrophoneDeviceList() },
+    { label: 'Test output', primary: true, onclick: () => testAudioOutput() },
+], settingsTargets.audio);
+
 makeSelectControl('Tone mapping', toneMappingMode, [
     { value: 'none', label: 'None - fastest' },
     { value: 'agx', label: 'AgX - richer colour' },
@@ -1785,8 +1861,8 @@ makeSelectControl('Tone mapping', toneMappingMode, [
 ], (value) => setToneMappingMode(value), settingsTargets.graphics);
 
 makeButtonRow([
-    { label: 'Performance preset', primary: true, onclick: () => { window.VortexQuality?.performance?.(); refreshSettingsStatus(); } },
-    { label: 'Visual preset', onclick: () => { window.VortexQuality?.visual?.(); refreshSettingsStatus(); } },
+    { label: 'Performance preset', primary: true, onclick: () => { window.VortexQuality?.performance?.(); showReloadNotice(); refreshSettingsStatus(); } },
+    { label: 'Visual preset', onclick: () => { window.VortexQuality?.visual?.(); showReloadNotice(); refreshSettingsStatus(); } },
 ], settingsTargets.graphics);
 
 makeSelectControl('Avatar renderer', _avatarRenderer, [
@@ -1794,8 +1870,9 @@ makeSelectControl('Avatar renderer', _avatarRenderer, [
     { value: 'legacy', label: 'Legacy FBX' },
 ], (value) => _setAvatarRenderer(value), settingsTargets.advanced);
 
-makeToggleControl('Antialias on next reload', readStorageFlag('v22Antialias', false), (checked) => {
+makeToggleControl('Antialias', readStorageFlag('v22Antialias', false), (checked) => {
     localStorage.setItem('v22Antialias', checked ? '1' : '0');
+    showReloadNotice();
 }, settingsTargets.advanced);
 
 makeSettingsSlider('Pixel ratio cap', 0.5, 1, renderer.getPixelRatio(), 0.05, function (slider, val) {
@@ -3047,7 +3124,6 @@ async function loadMapVortex(path, tx = 0, ty = 0, tz = 0) {
 }
 
 overlay.addEventListener('click', () => {
-    if (leaveButton.matches(':hover')) { return }
     window.canPlaySounds = true;
     if (window.SWORD_FIGHT || window.BUILD_MODE) {
         if (!gameSong) {
@@ -3067,10 +3143,9 @@ overlay.addEventListener('click', () => {
     requestGamePointerLock();
 });
 if (runtimeInput && typeof runtimeInput.attachOverlay === 'function') {
-    runtimeInput.attachOverlay(overlay, () => leaveButton.matches(':hover'));
+    runtimeInput.attachOverlay(overlay, () => false);
 } else {
     overlay.addEventListener('pointerdown', () => {
-        if (leaveButton.matches(':hover')) { return }
         requestGamePointerLock();
     });
 }

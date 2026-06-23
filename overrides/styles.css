@@ -32,6 +32,10 @@ body {
     display: none;
 }
 
+body.vw-menu-open #overlay span {
+    display: none;
+}
+
 #crosshair {
     display: none;
     position: fixed;
@@ -677,6 +681,41 @@ body {
     min-height: 0;
 }
 
+.vw-reload-notice {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 20px;
+    background: rgba(245,158,11,0.16);
+    border-bottom: 1px solid rgba(245,158,11,0.28);
+    color: #fde68a;
+    font-size: 13px;
+    font-weight: 680;
+}
+
+.vw-reload-notice[hidden] { display: none; }
+
+.vw-reload-notice button {
+    min-height: 30px;
+    border: 0;
+    border-radius: 6px;
+    padding: 0 12px;
+    background: #f59e0b;
+    color: #111827;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.vw-reload-notice button:hover { background: #fbbf24; }
+
+.vw-menu.has-reload-notice .vw-menu-layout {
+    height: calc(100% - 114px);
+}
+
 .vw-menu-tabs {
     padding: 12px;
     background: rgba(7,10,17,0.44);
@@ -950,6 +989,10 @@ body {
         height: calc(100% - 118px);
         grid-template-columns: 1fr;
         grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .vw-menu.has-reload-notice .vw-menu-layout {
+        height: calc(100% - 160px);
     }
 
     .vw-menu-tabs {

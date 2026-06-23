@@ -33,6 +33,10 @@
                 <div class="vw-menu-title">Menu</div>
             </div>
             <div class="vw-menu-actions">
+                <button class="vw-menu-button vw-menu-button-muted" type="button" data-menu-action="leave">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                    <span>Leave Game</span>
+                </button>
                 <button class="vw-menu-button vw-menu-button-muted" type="button" data-menu-action="reset-character">
                     <i class="fa-solid fa-rotate-right"></i>
                     <span>Reset Character</span>
@@ -42,6 +46,10 @@
                     <span>Resume</span>
                 </button>
             </div>
+        </div>
+        <div id="vw-reload-notice" class="vw-reload-notice" hidden>
+            <span>Some changes need a reload before they fully apply.</span>
+            <button type="button" data-menu-action="reload-now">Reload now</button>
         </div>
         <div class="vw-menu-layout">
             <div class="vw-menu-tabs" role="tablist" aria-label="Settings categories">
@@ -116,7 +124,7 @@
                 <section class="vw-menu-section" data-settings-section="advanced">
                     <div class="vw-section-head">
                         <h2>Advanced Graphics</h2>
-                        <p>Renderer options for testing different hardware.</p>
+                        <p>Hardware and compatibility options.</p>
                     </div>
                     <div id="vw-advanced-controls" class="vw-settings-stack"></div>
                 </section>
