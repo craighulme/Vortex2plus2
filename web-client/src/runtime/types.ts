@@ -11,6 +11,7 @@ import type { PhysicsWorld } from "../physics/types";
 import type { ScriptRuntime } from "../scripting/ScriptRuntime";
 import type { ClientPhysicsSandbox } from "../sandbox/ClientPhysicsSandbox";
 import type { CoreHudService } from "../ui/CoreHudService";
+import type { SettingsMenuService } from "../ui/SettingsMenuService";
 import type { EventBus } from "./EventBus";
 import type { PlatformBridge } from "../platform/PlatformBridge";
 import type { RendererService } from "../renderer/RendererService";
@@ -40,6 +41,7 @@ export type VortexRuntime = {
   slim: SlimService;
   protocol: ProtocolService;
   ui: CoreHudService;
+  settingsMenu: SettingsMenuService;
   diagnostics: DiagnosticsService;
   community: CommunityProfileService;
   streaming: AssetStreamService;

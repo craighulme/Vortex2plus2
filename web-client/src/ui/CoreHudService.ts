@@ -32,7 +32,17 @@ type RuntimePanelSource = {
     };
   };
   input: {
-    snapshot(): { locked: boolean; gameFocused: boolean; targetAttached: boolean; pauseVisible: boolean; pressed: string[] };
+    snapshot(): {
+      locked: boolean;
+      gameFocused: boolean;
+      targetAttached: boolean;
+      pauseVisible: boolean;
+      gameStarted: boolean;
+      pauseOpen: boolean;
+      resumePending: boolean;
+      focusState: string;
+      pressed: string[];
+    };
   };
   avatar: { getPreviewState?(): unknown };
   sandbox: {
@@ -253,9 +263,17 @@ function formatPhysics(backend: string): string {
   return backend;
 }
 
-function formatInput(input: { locked: boolean; gameFocused: boolean; targetAttached: boolean; pauseVisible: boolean; pressed: string[] }): string {
+function formatInput(input: {
+  locked: boolean;
+  gameFocused: boolean;
+  targetAttached: boolean;
+  pauseVisible: boolean;
+  focusState?: string;
+  pressed: string[];
+}): string {
   if (!input.targetAttached) return "waiting for canvas";
   if (input.locked) return `${input.pressed.length} keys, locked`;
+  if (input.focusState) return input.focusState;
   return input.pauseVisible ? "cursor visible" : input.gameFocused ? "focused" : "idle";
 }
 

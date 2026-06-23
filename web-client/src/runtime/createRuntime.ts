@@ -14,6 +14,7 @@ import { ClientPhysicsSandbox } from "../sandbox/ClientPhysicsSandbox";
 import { ScriptRuntime } from "../scripting/ScriptRuntime";
 import { AssetStreamService } from "../streaming/AssetStreamService";
 import { CoreHudService } from "../ui/CoreHudService";
+import { SettingsMenuService } from "../ui/SettingsMenuService";
 import { WorldService } from "../world/WorldService";
 import { EventBus } from "./EventBus";
 import type { RuntimeEventMap, RuntimeOptions, VortexRuntime } from "./types";
@@ -42,6 +43,7 @@ export function createVortexRuntime(options: RuntimeOptions): VortexRuntime {
     slim: new SlimService(),
     protocol: createProtocolService(),
     ui: new CoreHudService(options.document),
+    settingsMenu: new SettingsMenuService(options.document),
     diagnostics,
     community: new CommunityProfileService(),
     streaming: new AssetStreamService(diagnostics),

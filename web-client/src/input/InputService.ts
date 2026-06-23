@@ -3,8 +3,16 @@ export type InputSnapshot = {
   gameFocused: boolean;
   targetAttached: boolean;
   pauseVisible: boolean;
+  gameStarted: boolean;
+  pauseOpen: boolean;
+  resumePending: boolean;
+  focusState: InputFocusState;
   pressed: string[];
 };
+
+export type InputFocusState = "idle" | "focused" | "paused" | "resume-pending";
+
+export type PointerLockFailureResult = "resume-pending" | "pause";
 
 type InputEventDetail = {
   code: string;
@@ -43,8 +51,14 @@ export class InputService {
   private targetAttached = false;
   private locked = false;
   private pauseVisible = true;
+  private gameStarted = false;
+  private pauseOpen = false;
+  private resumePending = false;
   private disposed = false;
   private lastPointerLockAttemptAt = 0;
+  private lastPointerLockExitAt = 0;
+  private suppressPauseOpenUntil = 0;
+  private readonly pointerLockExitCooldownMs = 700;
 
   constructor(private readonly document: Document, private readonly windowRef: Window) {
     this.document.addEventListener("keydown", this.onKeyDown, true);
@@ -100,12 +114,87 @@ export class InputService {
     this.pauseVisible = visible;
   }
 
+  markGameStarted(): void {
+    this.gameStarted = true;
+    this.pauseOpen = false;
+    this.resumePending = false;
+    this.emitFocusState();
+  }
+
+  setPauseOpen(open: boolean): void {
+    this.pauseOpen = open;
+    if (open) {
+      this.resumePending = false;
+      this.clearKeys();
+    }
+    this.pauseVisible = open || !this.locked;
+    this.emitFocusState();
+  }
+
+  shouldStartFromPointerDown(): boolean {
+    return !this.pauseOpen && !this.document.pointerLockElement && (!this.gameStarted || this.resumePending);
+  }
+
+  beginPointerStart(): void {
+    this.gameStarted = true;
+    this.pauseOpen = false;
+    this.resumePending = false;
+    this.emitFocusState();
+  }
+
+  requestResume(options: { immediate?: boolean } = {}): "requested" | "pending" {
+    this.gameStarted = true;
+    this.pauseOpen = false;
+    this.resumePending = true;
+    this.suppressPauseOpenUntil = performance.now() + this.pointerLockExitCooldownMs;
+    if (options.immediate && performance.now() - this.lastPointerLockExitAt > this.pointerLockExitCooldownMs) {
+      this.resumePending = false;
+      this.requestPointerLock();
+      this.emitFocusState();
+      return "requested";
+    }
+    this.emitFocusState();
+    return "pending";
+  }
+
+  handlePointerLockFailure(error: unknown): PointerLockFailureResult {
+    if (isImmediateAfterExitSecurityError(error)) {
+      this.resumePending = true;
+      this.pauseOpen = false;
+      this.suppressPauseOpenUntil = performance.now() + this.pointerLockExitCooldownMs;
+      this.emitFocusState();
+      return "resume-pending";
+    }
+    this.pauseOpen = true;
+    this.resumePending = false;
+    this.pauseVisible = true;
+    this.clearKeys();
+    this.emitFocusState();
+    return "pause";
+  }
+
+  shouldOpenPauseOnUnlock(): boolean {
+    return this.gameStarted && !this.pauseOpen && performance.now() > this.suppressPauseOpenUntil;
+  }
+
+  overlayState(): { visible: boolean; blocksPointer: boolean } {
+    const waitingForFirstClick = !this.locked && !this.gameStarted;
+    return {
+      visible: this.pauseOpen,
+      blocksPointer: this.pauseOpen || this.resumePending || waitingForFirstClick
+    };
+  }
+
   snapshot(): InputSnapshot {
     return {
       locked: this.locked,
       gameFocused: this.gameHasFocus(),
       targetAttached: this.targetAttached,
       pauseVisible: this.pauseVisible,
+      gameStarted: this.gameStarted,
+      pauseOpen: this.pauseOpen,
+      resumePending: this.resumePending,
+      focusState: this.focusState(),
       pressed: Object.keys(this.keys).filter((key) => this.keys[key])
     };
   }
@@ -133,6 +222,7 @@ export class InputService {
   };
 
   private readonly onPointerDown = (): void => {
+    if (!this.gameStarted || this.pauseOpen || this.resumePending) return;
     if (!this.locked) this.requestPointerLock();
   };
 
@@ -153,10 +243,17 @@ export class InputService {
 
   private readonly onPointerLockChange = (): void => {
     this.locked = Boolean(this.target && this.document.pointerLockElement === this.target);
-    this.pauseVisible = !this.locked;
-    if (!this.locked) this.clearKeys();
+    if (this.locked) {
+      this.gameStarted = true;
+      this.pauseOpen = false;
+      this.resumePending = false;
+    } else {
+      this.lastPointerLockExitAt = performance.now();
+      this.clearKeys();
+    }
+    this.pauseVisible = this.pauseOpen || !this.locked;
     this.syncGlobalLock();
-    this.document.dispatchEvent(new CustomEvent("vortex-input-focus", { detail: this.snapshot() }));
+    this.emitFocusState();
   };
 
   private readonly onBeforeUnload = (event: BeforeUnloadEvent): void => {
@@ -168,6 +265,17 @@ export class InputService {
   private syncGlobalLock(): void {
     (this.windowRef as Window & { locked?: boolean }).locked = this.locked;
   }
+
+  private focusState(): InputFocusState {
+    if (this.locked) return "focused";
+    if (this.pauseOpen) return "paused";
+    if (this.resumePending) return "resume-pending";
+    return "idle";
+  }
+
+  private emitFocusState(): void {
+    this.document.dispatchEvent(new CustomEvent("vortex-input-focus", { detail: this.snapshot() }));
+  }
 }
 
 function shouldBlockBrowserShortcut(event: KeyboardEvent): boolean {
@@ -178,6 +286,12 @@ function shouldBlockBrowserShortcut(event: KeyboardEvent): boolean {
 
 function isChatFocused(): boolean {
   return Boolean((globalThis as typeof globalThis & { _chatFocused?: unknown })._chatFocused);
+}
+
+function isImmediateAfterExitSecurityError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const typed = error as { name?: unknown; message?: unknown };
+  return typed.name === "SecurityError" && String(typed.message || "").includes("immediately after");
 }
 
 function toInputDetail(event: KeyboardEvent): InputEventDetail {
