@@ -1,5 +1,9 @@
 
 document.getElementById('settings-btn').addEventListener('click', () => {
+    if (window.VortexMenu?.toggle) {
+        window.VortexMenu.toggle();
+        return;
+    }
     const p = document.getElementById('settings-panel');
     p.style.display = p.style.display === 'none' ? '' : 'none';
 });

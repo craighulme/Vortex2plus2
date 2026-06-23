@@ -75,7 +75,7 @@ renderer.setClearColor(0x87CEEB);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = enableShadows;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, readStorageNumber('v22PixelRatioCap', 1, 0.5, 1)));
 document.getElementById("scene").appendChild(renderer.domElement);
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -1368,6 +1368,7 @@ function _cursorOver(el) {
 const chatEl = document.getElementById('chat-window');
 renderer.domElement.addEventListener('click', () => {
     if (window.locked) {
+        if (routeSettingsClickUnderCursor()) return;
         const cursorOver = _cursorOver;
         let guiHandled = false;
         const topbarEl = document.getElementById('hud-topbar');
@@ -1444,13 +1445,136 @@ renderer.domElement.addEventListener('click', () => {
 const settingsPanel = document.getElementById('settings-panel');
 settingsPanel.style.cursor = 'auto'
 chatEl.style.cursor = 'auto'
+
+const settingsTargets = {
+    audio: document.getElementById('vw-audio-controls') || settingsPanel,
+    graphics: document.getElementById('vw-graphics-controls') || settingsPanel,
+    advanced: document.getElementById('vw-advanced-controls') || settingsPanel,
+    dev: document.getElementById('vw-dev-controls') || settingsPanel,
+};
+const settingsOutput = document.getElementById('vw-dev-output');
+const settingsStatus = document.getElementById('vw-session-status');
+const audioOutputSelect = document.getElementById('vw-audio-output');
+const audioInputSelect = document.getElementById('vw-audio-input');
+let settingsOpen = false;
+
+function inferSettingsTarget(label) {
+    const text = String(label || '').toLowerCase();
+    if (text.includes('music') || text.includes('sfx') || text.includes('master') || text.includes('chat')) return settingsTargets.audio;
+    if (text.includes('shadow') || text.includes('graphics')) return settingsTargets.graphics;
+    return settingsPanel;
+}
+
+function setSettingsTab(tabName) {
+    const tab = String(tabName || 'game');
+    for (const btn of settingsPanel.querySelectorAll('[data-settings-tab]')) {
+        btn.classList.toggle('active', btn.dataset.settingsTab === tab);
+    }
+    for (const section of settingsPanel.querySelectorAll('[data-settings-section]')) {
+        section.classList.toggle('active', section.dataset.settingsSection === tab);
+    }
+    refreshSettingsStatus();
+}
+
+function setSettingsOpen(open, options = {}) {
+    settingsOpen = !!open;
+    settingsPanel.style.display = settingsOpen ? '' : 'none';
+    settingsPanel.setAttribute('aria-hidden', settingsOpen ? 'false' : 'true');
+    if (settingsOpen) {
+        refreshSettingsStatus();
+        populateAudioDevices().catch(() => {});
+        if (document.pointerLockElement) document.exitPointerLock?.();
+    } else if (options.resume) {
+        requestGamePointerLock();
+    }
+}
+
+function toggleSettingsMenu() {
+    setSettingsOpen(!settingsOpen);
+}
+
+window.VortexMenu = {
+    open: () => setSettingsOpen(true),
+    close: () => setSettingsOpen(false),
+    toggle: toggleSettingsMenu,
+    isOpen: () => settingsOpen,
+    tab: setSettingsTab,
+};
+
+settingsPanel.addEventListener('click', (event) => {
+    const tabButton = event.target.closest?.('[data-settings-tab]');
+    if (tabButton) {
+        setSettingsTab(tabButton.dataset.settingsTab);
+        return;
+    }
+    const action = event.target.closest?.('[data-menu-action]')?.dataset.menuAction;
+    if (!action) return;
+    if (action === 'resume') setSettingsOpen(false, { resume: true });
+    if (action === 'reset-character') {
+        resetCharacterToSpawn();
+        refreshSettingsStatus();
+    }
+    if (action === 'leave') window.location.href = 'https://playvortex.io/games/1';
+});
+
+document.addEventListener('keydown', (event) => {
+    if (event.code !== 'Escape') return;
+    if (window._chatFocused) return;
+    if (settingsOpen) {
+        event.preventDefault();
+        setSettingsOpen(false);
+    }
+}, true);
+
+document.addEventListener('pointerlockchange', () => {
+    if (!document.pointerLockElement && !settingsOpen && window.canPlaySounds) {
+        setSettingsOpen(true);
+    }
+});
+
+function refreshSettingsStatus() {
+    if (!settingsStatus) return;
+    const quality = window.VortexQuality?.get?.();
+    const rendererStats = renderer.info?.render || {};
+    const report = window.VortexPerf?.report?.();
+    const fps = report?.cadence?.estimatedPresentedFps || 0;
+    const values = [
+        ['Renderer', renderer.capabilities?.isWebGL2 ? 'WebGL2' : 'WebGL'],
+        ['Draw Calls', String(rendererStats.calls ?? '-')],
+        ['Triangles', String(rendererStats.triangles ?? '-')],
+        ['FPS', fps ? String(fps) : '-'],
+        ['Runtime', window.VortexRuntime ? 'Enabled' : 'Legacy'],
+        ['Graphics', quality?.shadows ? 'Visual' : 'Performance'],
+    ];
+    settingsStatus.innerHTML = values.map(([label, value]) => `
+        <div class="vw-status">
+            <div class="vw-status-label">${label}</div>
+            <div class="vw-status-value">${value}</div>
+        </div>
+    `).join('');
+}
+
+function routeSettingsClickUnderCursor() {
+    if (!settingsOpen || !_cursorOver(settingsPanel)) return false;
+    const controls = settingsPanel.querySelectorAll('button, input, select');
+    for (const control of controls) {
+        if (!_cursorOver(control)) continue;
+        if (control.type === 'range') return true;
+        control.focus?.();
+        control.click?.();
+        return true;
+    }
+    return true;
+}
+
 const toggleShadows = document.createElement('div');
-toggleShadows.className = 'sp-row';
+toggleShadows.className = 'vw-toggle-row';
 let toggleShadowsleftText = document.createElement('span');
-toggleShadowsleftText.className = 'sp-label';
-toggleShadowsleftText.innerText = 'Toggle shadows'
+toggleShadowsleftText.className = 'vw-toggle-label';
+toggleShadowsleftText.innerText = 'Dynamic shadows'
 let toggleShadowsCheckBox = document.createElement('input');
 toggleShadowsCheckBox.type = "checkbox";
+toggleShadowsCheckBox.className = 'vw-toggle';
 if (enableShadows) {
     toggleShadowsCheckBox.click();
 }
@@ -1459,10 +1583,13 @@ toggleShadowsCheckBox.onchange = function () {
 }
 toggleShadows.appendChild(toggleShadowsleftText);
 toggleShadows.appendChild(toggleShadowsCheckBox);
+settingsTargets.graphics.appendChild(toggleShadows);
 
 
-function makeSettingsSlider(text, min, max, def, step, onchange) {
-    def = localStorage.getItem(text) ? parseFloat(localStorage.getItem(text)) : def;
+function makeSettingsSlider(text, min, max, def, step, onchange, options = {}) {
+    const storageKey = options.storageKey || text;
+    const formatter = options.formatter || ((value) => String(value));
+    def = localStorage.getItem(storageKey) ? parseFloat(localStorage.getItem(storageKey)) : def;
     const sliderContainer = document.createElement('div');
     sliderContainer.className = 'sp-row';
     let sliderLeftText = document.createElement('span');
@@ -1475,18 +1602,82 @@ function makeSettingsSlider(text, min, max, def, step, onchange) {
     sliderSlider.step = step;
     let sliderRightText = document.createElement('span');
     sliderRightText.className = 'sp-val';
-    sliderRightText.innerText = def;
+    sliderRightText.innerText = formatter(def);
     sliderSlider.oninput = function () {
-        sliderRightText.innerText = sliderSlider.value
-        localStorage.setItem(text, sliderSlider.value);
+        sliderRightText.innerText = formatter(Number(sliderSlider.value));
+        localStorage.setItem(storageKey, sliderSlider.value);
         onchange(sliderSlider, Number(sliderSlider.value));
+        refreshSettingsStatus();
     }
     sliderContainer.appendChild(sliderLeftText);
     sliderContainer.appendChild(sliderSlider);
     sliderContainer.appendChild(sliderRightText);
-    settingsPanel.appendChild(sliderContainer);
+    (options.target || inferSettingsTarget(text)).appendChild(sliderContainer);
     sliderSlider.value = def;
     onchange(sliderSlider, def);
+    return { container: sliderContainer, input: sliderSlider, value: sliderRightText };
+}
+
+function makeToggleControl(label, checked, onchange, target = settingsTargets.advanced) {
+    const row = document.createElement('div');
+    row.className = 'vw-toggle-row';
+    const text = document.createElement('span');
+    text.className = 'vw-toggle-label';
+    text.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.className = 'vw-toggle';
+    input.checked = !!checked;
+    input.onchange = () => {
+        onchange(input.checked);
+        refreshSettingsStatus();
+    };
+    row.appendChild(text);
+    row.appendChild(input);
+    target.appendChild(row);
+    return input;
+}
+
+function makeSelectControl(label, value, options, onchange, target = settingsTargets.advanced) {
+    const field = document.createElement('div');
+    field.className = 'vw-field';
+    const text = document.createElement('label');
+    const id = `vw-select-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    text.htmlFor = id;
+    text.textContent = label;
+    const select = document.createElement('select');
+    select.id = id;
+    select.className = 'vw-select';
+    for (const option of options) {
+        const el = document.createElement('option');
+        el.value = option.value;
+        el.textContent = option.label;
+        select.appendChild(el);
+    }
+    select.value = value;
+    select.onchange = () => {
+        onchange(select.value);
+        refreshSettingsStatus();
+    };
+    field.appendChild(text);
+    field.appendChild(select);
+    target.appendChild(field);
+    return select;
+}
+
+function makeButtonRow(buttons, target = settingsTargets.dev) {
+    const row = document.createElement('div');
+    row.className = 'vw-inline-buttons';
+    for (const button of buttons) {
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.className = `vw-small-button${button.primary ? ' primary' : ''}`;
+        el.textContent = button.label;
+        el.onclick = button.onclick;
+        row.appendChild(el);
+    }
+    target.appendChild(row);
+    return row;
 }
 
 const oofSound = new Audio(importedAssets.oofSound)
@@ -1498,7 +1689,168 @@ const clickSound = new Audio(importedAssets.placeBlock);
 clickSound.preload = "auto";
 clickSound.volume = 0.8;
 
-settingsPanel.appendChild(toggleShadows);
+let gameSong;
+let masterVolume = readStorageNumber('Master volume', 1, 0, 1);
+let gameSongVolume = readStorageNumber('Music volume', 0.9, 0, 1);
+let sfxVolume = readStorageNumber('Sfx volume', 1, 0, 1);
+let chatVolume = readStorageNumber('Chat volume', 1, 0, 1);
+
+function volumeLabel(value) {
+    return `${Math.round(Number(value) * 100)}%`;
+}
+
+function selectedAudioOutputId() {
+    return localStorage.getItem('v22AudioOutput') || '';
+}
+
+function applyAudioOutputTo(audio) {
+    if (!audio || typeof audio.setSinkId !== 'function') return;
+    audio.setSinkId(selectedAudioOutputId()).catch(() => {});
+}
+
+function applyAudioVolumes() {
+    if (gameSong) gameSong.volume = masterVolume * gameSongVolume;
+    slashSound.volume = masterVolume * sfxVolume * 0.8;
+    clickSound.volume = masterVolume * sfxVolume * 0.8;
+    oofSound.volume = masterVolume * sfxVolume;
+}
+
+async function populateAudioDevices() {
+    if (!audioOutputSelect || !audioInputSelect) return;
+    const devices = navigator.mediaDevices?.enumerateDevices
+        ? await navigator.mediaDevices.enumerateDevices()
+        : [];
+    const selectedOutput = selectedAudioOutputId();
+    const selectedInput = localStorage.getItem('v22AudioInput') || '';
+
+    function fillSelect(select, kind, selected, fallbackLabel) {
+        const matches = devices.filter((device) => device.kind === kind);
+        select.innerHTML = '';
+        const def = document.createElement('option');
+        def.value = '';
+        def.textContent = `Default ${fallbackLabel}`;
+        select.appendChild(def);
+        matches.forEach((device, index) => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.textContent = device.label || `${fallbackLabel} ${index + 1}`;
+            select.appendChild(option);
+        });
+        select.value = [...select.options].some((option) => option.value === selected) ? selected : '';
+    }
+
+    fillSelect(audioOutputSelect, 'audiooutput', selectedOutput, 'output');
+    fillSelect(audioInputSelect, 'audioinput', selectedInput, 'microphone');
+}
+
+if (audioOutputSelect) {
+    audioOutputSelect.onchange = () => {
+        localStorage.setItem('v22AudioOutput', audioOutputSelect.value);
+        applyAudioOutputTo(gameSong);
+        applyAudioOutputTo(slashSound);
+        applyAudioOutputTo(clickSound);
+        applyAudioOutputTo(oofSound);
+    };
+}
+
+if (audioInputSelect) {
+    audioInputSelect.onchange = () => {
+        localStorage.setItem('v22AudioInput', audioInputSelect.value);
+    };
+}
+
+makeSettingsSlider('Master volume', 0, 1, 1, 0.05, function (slider, val) {
+    masterVolume = val;
+    applyAudioVolumes();
+}, { target: settingsTargets.audio, formatter: volumeLabel });
+
+makeSettingsSlider('Music volume', 0, 1, 0.9, 0.05, function (slider, val) {
+    gameSongVolume = val;
+    applyAudioVolumes();
+}, { target: settingsTargets.audio, formatter: volumeLabel });
+
+makeSettingsSlider('Sfx volume', 0, 1, 1, 0.05, function (slider, val) {
+    sfxVolume = val;
+    applyAudioVolumes();
+}, { target: settingsTargets.audio, formatter: volumeLabel });
+
+makeSettingsSlider('Chat volume', 0, 1, 1, 0.05, function (slider, val) {
+    chatVolume = val;
+}, { target: settingsTargets.audio, formatter: volumeLabel });
+
+makeSelectControl('Tone mapping', toneMappingMode, [
+    { value: 'none', label: 'None - fastest' },
+    { value: 'agx', label: 'AgX - richer colour' },
+    { value: 'aces', label: 'ACES - cinematic' },
+], (value) => setToneMappingMode(value), settingsTargets.graphics);
+
+makeButtonRow([
+    { label: 'Performance preset', primary: true, onclick: () => { window.VortexQuality?.performance?.(); refreshSettingsStatus(); } },
+    { label: 'Visual preset', onclick: () => { window.VortexQuality?.visual?.(); refreshSettingsStatus(); } },
+], settingsTargets.graphics);
+
+makeSelectControl('Avatar renderer', _avatarRenderer, [
+    { value: 'modern', label: 'Modern GLB' },
+    { value: 'legacy', label: 'Legacy FBX' },
+], (value) => _setAvatarRenderer(value), settingsTargets.advanced);
+
+makeToggleControl('Antialias on next reload', readStorageFlag('v22Antialias', false), (checked) => {
+    localStorage.setItem('v22Antialias', checked ? '1' : '0');
+}, settingsTargets.advanced);
+
+makeSettingsSlider('Pixel ratio cap', 0.5, 1, renderer.getPixelRatio(), 0.05, function (slider, val) {
+    renderer.setPixelRatio(Math.max(0.5, Math.min(1, val)));
+}, {
+    target: settingsTargets.advanced,
+    storageKey: 'v22PixelRatioCap',
+    formatter: (value) => `${Number(value).toFixed(2)}x`
+});
+
+makeToggleControl('Frame profiler', !!VortexPerf.enabled, (checked) => {
+    VortexPerf.setEnabled(checked);
+}, settingsTargets.dev);
+
+makeToggleControl('Console timing log', !!VortexPerf.log, (checked) => {
+    VortexPerf.setLog(checked);
+}, settingsTargets.dev);
+
+makeButtonRow([
+    {
+        label: 'Sample FPS',
+        primary: true,
+        onclick: async () => {
+            if (!settingsOutput) return;
+            settingsOutput.textContent = 'Sampling...';
+            try {
+                const report = await VortexPerf.sample(2);
+                settingsOutput.textContent = JSON.stringify({
+                    fps: report.cadence.estimatedPresentedFps,
+                    frame: report.sections.frame,
+                    render: report.sections.render,
+                    calls: report.renderer.calls,
+                    triangles: report.renderer.triangles
+                }, null, 2);
+                refreshSettingsStatus();
+            } catch (err) {
+                settingsOutput.textContent = `Sample failed: ${err?.message || err}`;
+            }
+        }
+    },
+    { label: 'Runtime panel', onclick: () => window.VortexRuntimeDevTools?.enable?.() },
+    { label: 'Hide runtime panel', onclick: () => window.VortexRuntimeDevTools?.disable?.() },
+], settingsTargets.dev);
+
+makeButtonRow([
+    { label: 'Spawn football', onclick: () => window.VortexRuntime?.sandbox?.spawnFootball?.(window.VortexRuntime) },
+    { label: 'Stress 250/s', onclick: () => { window.VortexRuntimeDevTools?.enable?.(); window.VortexRuntime?.sandbox?.startStress?.(window.VortexRuntime, 250); } },
+    { label: 'Stop stress', onclick: () => window.VortexRuntime?.sandbox?.clear?.(window.VortexRuntime) },
+], settingsTargets.dev);
+
+populateAudioDevices().catch(() => {});
+applyAudioOutputTo(slashSound);
+applyAudioOutputTo(clickSound);
+applyAudioOutputTo(oofSound);
+applyAudioVolumes();
 
 
 var raycaster = new THREE.Raycaster();
@@ -2532,6 +2884,35 @@ function updateCamera(dt) {
 let sword;
 let loadingSword = false;
 let died = false;
+function resetCharacterToSpawn() {
+    if (!character) return false;
+    if (typeof window.chooseSpawnPoint === 'function' && window.map) {
+        try {
+            const sp = window.chooseSpawnPoint(window.map);
+            if (sp) {
+                _spawnPoint.x = Number(sp.x ?? _spawnPoint.x);
+                _spawnPoint.y = Number(sp.y ?? _spawnPoint.y) + CHAR_FOOT_OFFSET;
+                _spawnPoint.z = Number(sp.z ?? _spawnPoint.z);
+                _spawnPoint.ry = Number(sp.ry ?? _spawnPoint.ry ?? Math.PI);
+            }
+        } catch {}
+    }
+    const spawnY = _spawnPoint.y !== null ? _spawnPoint.y : CHAR_STAND_Y;
+    character.position.set(_spawnPoint.x, spawnY, _spawnPoint.z);
+    character.rotation.y = _spawnPoint.ry ?? Math.PI;
+    velY = 0;
+    grounded = false;
+    coyoteTimer = 0;
+    jumpBuffer = 0;
+    extraVelX = 0;
+    extraVelZ = 0;
+    climbState = 'none';
+    climbBlock = null;
+    died = false;
+    if (typeof playerSpecialValues !== 'undefined') playerSpecialValues.health = 1;
+    return true;
+}
+
 function swordUpdate() {
     if (!window.SWORD_FIGHT) return;
     setRot(anim.bones.Right_Arm, 'x', -Math.PI * 0.5, 1, 1);
@@ -2665,20 +3046,6 @@ async function loadMapVortex(path, tx = 0, ty = 0, tz = 0) {
     }
 }
 
-let gameSong;
-let gameSongVolume = 0.9;
-makeSettingsSlider('Music volume', 0, 1, 0.9, 0.1, function (slider, val) {
-    gameSongVolume = val;
-    if (gameSong) {
-        gameSong.volume = val;
-    }
-})
-makeSettingsSlider('Sfx volume', 0, 1, 1, 0.1, function (slider, val) {
-    slashSound.volume = val * 0.8;
-    clickSound.volume = val * 0.8;
-    oofSound.volume = val;
-})
-
 overlay.addEventListener('click', () => {
     if (leaveButton.matches(':hover')) { return }
     window.canPlaySounds = true;
@@ -2687,7 +3054,8 @@ overlay.addEventListener('click', () => {
             gameSong = new Audio(window.SWORD_FIGHT && importedAssets.sfothSong || importedAssets.buildSong);
             gameSong.loop = true;
             gameSong.preload = "auto";
-            gameSong.volume = gameSongVolume;
+            applyAudioOutputTo(gameSong);
+            applyAudioVolumes();
             gameSong.addEventListener('ended', function () {
                 this.currentTime = 0;
                 this.play();
@@ -2735,6 +3103,7 @@ window._vortex = {
         return setShadowsEnabled(value);
     },
     requestLock() { requestGamePointerLock(); },
+    resetCharacter() { return resetCharacterToSpawn(); },
     loadMap: loadMapVortex,
     addPart(x, y, z, sx = 4, sy = 1, sz = 4, color = 0x4a6fd8, canCollide = true) {
         const [mesh, id] = addStud(sx, sy, sz, color, x, y - sy * 0.5, z, 0, 0, 0, "Block", 0, false, canCollide);

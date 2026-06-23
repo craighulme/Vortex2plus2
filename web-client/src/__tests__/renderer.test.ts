@@ -42,4 +42,36 @@ describe("RendererService", () => {
       shadowsEnabled: false
     });
   });
+
+  it("honors the saved pixel ratio cap", () => {
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem(key: string) {
+          return key === "v22PixelRatioCap" ? "0.5" : null;
+        }
+      }
+    });
+
+    const renderer = {
+      pixelRatio: 1,
+      setPixelRatio(value: number) {
+        this.pixelRatio = value;
+      },
+      getPixelRatio() {
+        return this.pixelRatio;
+      }
+    };
+
+    const service = new RendererService();
+    service.attachLegacy({ renderer });
+
+    expect(renderer.pixelRatio).toBe(0.5);
+
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: originalStorage
+    });
+  });
 });

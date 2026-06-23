@@ -590,33 +590,396 @@ body {
 
 #settings-panel {
     position: fixed;
-    top: 56px;
-    left: 8px;
-    width: 260px;
-    background: rgba(18, 18, 26, 0.95);
-    border-radius: 8px;
-    padding: 12px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(920px, calc(100vw - 32px));
+    height: min(640px, calc(100vh - 32px));
     z-index: 300;
-    font-family: system-ui, sans-serif;
-    color: #fff;
+    pointer-events: auto;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #f8fafc;
 }
-.sp-title {
+
+.vw-menu {
+    background: rgba(15, 18, 26, 0.96);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.46);
+    overflow: hidden;
+    backdrop-filter: blur(18px);
+}
+
+.vw-menu-top {
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 20px;
+    background: rgba(255,255,255,0.055);
+    border-bottom: 1px solid rgba(255,255,255,0.09);
+}
+
+.vw-menu-eyebrow {
+    color: rgba(248,250,252,0.56);
     font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
+    font-weight: 800;
     letter-spacing: 0.08em;
-    color: rgba(255,255,255,0.45);
-    margin-bottom: 10px;
+    text-transform: uppercase;
 }
-.sp-row {
+
+.vw-menu-title {
+    color: #fff;
+    font-size: 24px;
+    font-weight: 780;
+    line-height: 1.1;
+}
+
+.vw-menu-actions {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
-.sp-label { font-size: 13px; flex: 1; }
-.sp-row input[type=range] { width: 80px; accent-color: #5865F2; }
-.sp-val { font-size: 12px; color: rgba(255,255,255,0.5); min-width: 34px; text-align: right; }
+
+.vw-menu-button,
+.vw-action-card,
+.vw-tab {
+    border: 0;
+    color: #fff;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.vw-menu-button {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 14px;
+    border-radius: 6px;
+    background: #2563eb;
+    font-size: 13px;
+    font-weight: 760;
+}
+
+.vw-menu-button:hover { background: #1d4ed8; }
+.vw-menu-button-muted { background: rgba(255,255,255,0.11); color: rgba(255,255,255,0.82); }
+.vw-menu-button-muted:hover { background: rgba(255,255,255,0.17); }
+
+.vw-menu-layout {
+    height: calc(100% - 72px);
+    display: grid;
+    grid-template-columns: 188px minmax(0, 1fr);
+    min-height: 0;
+}
+
+.vw-menu-tabs {
+    padding: 12px;
+    background: rgba(7,10,17,0.44);
+    border-right: 1px solid rgba(255,255,255,0.08);
+    overflow-y: auto;
+}
+
+.vw-tab {
+    width: 100%;
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    margin-bottom: 5px;
+    background: transparent;
+    border-radius: 6px;
+    color: rgba(248,250,252,0.68);
+    font-size: 13px;
+    font-weight: 720;
+    text-align: left;
+}
+
+.vw-tab i { width: 18px; text-align: center; color: rgba(148,163,184,0.9); }
+.vw-tab:hover { background: rgba(255,255,255,0.07); color: #fff; }
+.vw-tab.active { background: rgba(37,99,235,0.92); color: #fff; }
+.vw-tab.active i { color: #fff; }
+
+.vw-menu-content {
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.vw-menu-section { display: none; }
+.vw-menu-section.active {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.vw-section-head h2 {
+    margin: 0 0 4px;
+    color: #fff;
+    font-size: 21px;
+    font-weight: 780;
+}
+
+.vw-section-head p {
+    margin: 0;
+    color: rgba(226,232,240,0.58);
+    font-size: 13px;
+}
+
+.vw-card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.vw-action-card {
+    min-height: 92px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.075);
+    border: 1px solid rgba(255,255,255,0.08);
+    font-size: 13px;
+    font-weight: 760;
+}
+
+.vw-action-card i { font-size: 20px; color: #93c5fd; }
+.vw-action-card:hover { background: rgba(255,255,255,0.115); }
+.vw-action-card.vw-danger i { color: #fca5a5; }
+
+.vw-status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.vw-status {
+    min-height: 66px;
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.055);
+    border: 1px solid rgba(255,255,255,0.075);
+}
+
+.vw-status-label {
+    color: rgba(226,232,240,0.52);
+    font-size: 11px;
+    font-weight: 760;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.vw-status-value {
+    margin-top: 6px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 760;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vw-settings-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sp-row,
+.vw-field,
+.vw-toggle-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) minmax(180px, 280px) 54px;
+    align-items: center;
+    gap: 12px;
+    min-height: 46px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.055);
+    border: 1px solid rgba(255,255,255,0.075);
+}
+
+.vw-field {
+    grid-template-columns: minmax(150px, 1fr) minmax(220px, 360px);
+}
+
+.vw-toggle-row {
+    grid-template-columns: minmax(150px, 1fr) auto;
+}
+
+.sp-label,
+.vw-field label,
+.vw-toggle-label {
+    color: rgba(248,250,252,0.88);
+    font-size: 13px;
+    font-weight: 680;
+}
+
+.sp-row input[type=range] {
+    width: 100%;
+    accent-color: #3b82f6;
+}
+
+.sp-val {
+    color: rgba(226,232,240,0.58);
+    font-size: 12px;
+    font-weight: 720;
+    text-align: right;
+    min-width: 42px;
+}
+
+.vw-field select,
+.vw-field input,
+.vw-select,
+.vw-number {
+    min-height: 34px;
+    width: 100%;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    background: rgba(2,6,23,0.52);
+    color: #fff;
+    padding: 0 10px;
+    font: inherit;
+    font-size: 13px;
+    outline: none;
+}
+
+.vw-field select:focus,
+.vw-select:focus,
+.vw-number:focus {
+    border-color: rgba(96,165,250,0.9);
+}
+
+.vw-toggle {
+    width: 44px;
+    height: 24px;
+    appearance: none;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 999px;
+    background: rgba(15,23,42,0.9);
+    position: relative;
+    cursor: pointer;
+}
+
+.vw-toggle::after {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    top: 2px;
+    left: 2px;
+    border-radius: 50%;
+    background: rgba(226,232,240,0.9);
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.vw-toggle:checked {
+    background: #2563eb;
+    border-color: #60a5fa;
+}
+
+.vw-toggle:checked::after {
+    transform: translateX(20px);
+    background: #fff;
+}
+
+.vw-inline-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.vw-small-button {
+    min-height: 34px;
+    border: 0;
+    border-radius: 6px;
+    padding: 0 12px;
+    background: rgba(255,255,255,0.1);
+    color: rgba(248,250,252,0.88);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 760;
+    cursor: pointer;
+}
+
+.vw-small-button:hover { background: rgba(255,255,255,0.16); color: #fff; }
+.vw-small-button.primary { background: #2563eb; color: #fff; }
+.vw-small-button.primary:hover { background: #1d4ed8; }
+
+.vw-dev-output {
+    min-height: 112px;
+    max-height: 180px;
+    overflow: auto;
+    margin: 0;
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(2,6,23,0.62);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(226,232,240,0.78);
+    font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+    #settings-panel {
+        width: calc(100vw - 20px);
+        height: calc(100vh - 20px);
+    }
+
+    .vw-menu-top {
+        height: auto;
+        min-height: 72px;
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px;
+    }
+
+    .vw-menu-actions { width: 100%; justify-content: stretch; }
+    .vw-menu-button { flex: 1; }
+
+    .vw-menu-layout {
+        height: calc(100% - 118px);
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .vw-menu-tabs {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        border-right: 0;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .vw-tab {
+        width: auto;
+        min-width: 46px;
+        margin-bottom: 0;
+    }
+
+    .vw-tab span { display: none; }
+    .vw-card-grid,
+    .vw-status-grid { grid-template-columns: 1fr; }
+
+    .sp-row,
+    .vw-field,
+    .vw-toggle-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .sp-val { text-align: left; }
+}
 
 #lb-player-panel {
     position: fixed;

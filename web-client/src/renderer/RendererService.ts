@@ -54,7 +54,7 @@ export class RendererService {
     this.optimizedRenderer = renderer;
 
     const devicePixelRatio = readDevicePixelRatio();
-    renderer.setPixelRatio?.(Math.min(devicePixelRatio, 1));
+    renderer.setPixelRatio?.(Math.min(devicePixelRatio, readPixelRatioCap()));
   }
 
   snapshot(): RendererSnapshot {
@@ -99,6 +99,12 @@ export class RendererService {
 function readDevicePixelRatio(): number {
   const value = Number((globalThis as typeof globalThis & { devicePixelRatio?: unknown }).devicePixelRatio ?? 1);
   return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+function readPixelRatioCap(): number {
+  const storage = (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage;
+  const value = Number(storage?.getItem("v22PixelRatioCap") ?? 1);
+  return Number.isFinite(value) ? Math.max(0.5, Math.min(1, value)) : 1;
 }
 
 function readWebGl2(renderer: LegacyRenderer): boolean | null {

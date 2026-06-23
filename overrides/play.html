@@ -26,12 +26,110 @@
         <a class="lbp-profile" id="lbp-profile-link" href="#" target="_blank">View Profile →</a>
     </div>
 
-    <div id="settings-panel" style="display:none">
-        <div class="sp-title">Settings</div>
-        <div class="sp-row">
-            <span class="sp-label">Camera Sensitivity</span>
-            <input type="range" id="sp-sens" min="0.1" max="3" step="0.05" value="1">
-            <span class="sp-val" id="sp-sens-val">1.0x</span>
+    <div id="settings-panel" class="vw-menu" style="display:none" role="dialog" aria-label="Vortex Web menu">
+        <div class="vw-menu-top">
+            <div>
+                <div class="vw-menu-eyebrow">Vortex Web</div>
+                <div class="vw-menu-title">Menu</div>
+            </div>
+            <div class="vw-menu-actions">
+                <button class="vw-menu-button vw-menu-button-muted" type="button" data-menu-action="reset-character">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>Reset Character</span>
+                </button>
+                <button class="vw-menu-button" type="button" data-menu-action="resume">
+                    <i class="fa-solid fa-play"></i>
+                    <span>Resume</span>
+                </button>
+            </div>
+        </div>
+        <div class="vw-menu-layout">
+            <div class="vw-menu-tabs" role="tablist" aria-label="Settings categories">
+                <button class="vw-tab active" type="button" data-settings-tab="game"><i class="fa-solid fa-house"></i><span>Game</span></button>
+                <button class="vw-tab" type="button" data-settings-tab="audio"><i class="fa-solid fa-volume-high"></i><span>Audio</span></button>
+                <button class="vw-tab" type="button" data-settings-tab="controls"><i class="fa-solid fa-computer-mouse"></i><span>Controls</span></button>
+                <button class="vw-tab" type="button" data-settings-tab="graphics"><i class="fa-solid fa-display"></i><span>Graphics</span></button>
+                <button class="vw-tab" type="button" data-settings-tab="advanced"><i class="fa-solid fa-sliders"></i><span>Advanced</span></button>
+                <button class="vw-tab" type="button" data-settings-tab="dev"><i class="fa-solid fa-gauge-high"></i><span>Dev Tools</span></button>
+            </div>
+            <div class="vw-menu-content">
+                <section class="vw-menu-section active" data-settings-section="game">
+                    <div class="vw-section-head">
+                        <h2>Game</h2>
+                        <p>Session actions and quick status.</p>
+                    </div>
+                    <div class="vw-card-grid">
+                        <button class="vw-action-card" type="button" data-menu-action="resume">
+                            <i class="fa-solid fa-play"></i>
+                            <span>Resume</span>
+                        </button>
+                        <button class="vw-action-card" type="button" data-menu-action="reset-character">
+                            <i class="fa-solid fa-rotate-right"></i>
+                            <span>Reset Character</span>
+                        </button>
+                        <button class="vw-action-card vw-danger" type="button" data-menu-action="leave">
+                            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                            <span>Leave Game</span>
+                        </button>
+                    </div>
+                    <div class="vw-status-grid" id="vw-session-status"></div>
+                </section>
+
+                <section class="vw-menu-section" data-settings-section="audio">
+                    <div class="vw-section-head">
+                        <h2>Audio</h2>
+                        <p>Output, input, and volume levels.</p>
+                    </div>
+                    <div id="vw-audio-controls" class="vw-settings-stack"></div>
+                    <div class="vw-field">
+                        <label for="vw-audio-output">Output device</label>
+                        <select id="vw-audio-output"></select>
+                    </div>
+                    <div class="vw-field">
+                        <label for="vw-audio-input">Microphone</label>
+                        <select id="vw-audio-input"></select>
+                    </div>
+                </section>
+
+                <section class="vw-menu-section" data-settings-section="controls">
+                    <div class="vw-section-head">
+                        <h2>Controls</h2>
+                        <p>Camera and input preferences.</p>
+                    </div>
+                    <div class="vw-settings-stack">
+                        <div class="sp-row">
+                            <span class="sp-label">Camera Sensitivity</span>
+                            <input type="range" id="sp-sens" min="0.1" max="3" step="0.05" value="1">
+                            <span class="sp-val" id="sp-sens-val">1.0x</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="vw-menu-section" data-settings-section="graphics">
+                    <div class="vw-section-head">
+                        <h2>Graphics</h2>
+                        <p>Fast defaults with optional visual upgrades.</p>
+                    </div>
+                    <div id="vw-graphics-controls" class="vw-settings-stack"></div>
+                </section>
+
+                <section class="vw-menu-section" data-settings-section="advanced">
+                    <div class="vw-section-head">
+                        <h2>Advanced Graphics</h2>
+                        <p>Renderer options for testing different hardware.</p>
+                    </div>
+                    <div id="vw-advanced-controls" class="vw-settings-stack"></div>
+                </section>
+
+                <section class="vw-menu-section" data-settings-section="dev">
+                    <div class="vw-section-head">
+                        <h2>Dev Tools</h2>
+                        <p>Profiling and local runtime tools.</p>
+                    </div>
+                    <div id="vw-dev-controls" class="vw-settings-stack"></div>
+                    <pre id="vw-dev-output" class="vw-dev-output">No sample yet.</pre>
+                </section>
+            </div>
         </div>
     </div>
 
