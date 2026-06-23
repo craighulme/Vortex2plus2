@@ -1,4 +1,9 @@
 const extensionApi = globalThis.chrome || globalThis.browser;
+const initialUrl = new URL(document.URL);
+const isPlayRuntimePage = initialUrl.searchParams.has("Play");
+if (isPlayRuntimePage) {
+    window.stop();
+}
 
 const importedAssets = {
     stud: extensionApi.runtime.getURL("img/textures/stud.png"),

@@ -29,6 +29,7 @@ const _PAD_BLUE = 0x0d69ac;
 let _marketItems = {};
 let _ownedIds = new Set();
 let _currentItemId = undefined;
+const _marketplaceApiEnabled = localStorage.getItem('v22MarketplaceApi') === '1';
 
 function _setPadColor(pad, hex) {
     if (!pad.mesh) return;
@@ -51,6 +52,11 @@ function _refreshPadColors() {
 }
 
 async function _loadMarketplace() {
+    if (!_marketplaceApiEnabled) {
+        _currentItemId = null;
+        _refreshPadColors();
+        return;
+    }
     try {
         const [itemsRes, invRes, shirtRes] = await Promise.all([
             fetch('/api/marketplace/items'),
@@ -115,6 +121,7 @@ function _equipShirt(pad) {
         window._vortex.applyShirt(item.image_path);
     }
     _refreshPadColors();
+    if (!_marketplaceApiEnabled) return;
     fetch('/api/clothing/shirt', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -145,6 +152,7 @@ window._onPurchaseToken = (item_id, token) => {
 };
 
 async function _doPurchase() {
+    if (!_marketplaceApiEnabled) return;
     const pad = _promptPad;
     if (!pad) return;
     _closePrompt();
