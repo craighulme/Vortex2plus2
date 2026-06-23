@@ -4,6 +4,10 @@ body {
     cursor: none;
 }
 
+body.vw-menu-open {
+    cursor: default;
+}
+
 #overlay {
     position: fixed;
     inset: 0;
@@ -33,6 +37,10 @@ body {
 }
 
 body.vw-menu-open #overlay span {
+    display: none;
+}
+
+body.vw-game-started #overlay span {
     display: none;
 }
 
@@ -605,6 +613,10 @@ body.vw-menu-open #overlay span {
     color: #f8fafc;
 }
 
+body.vw-menu-open #cursor {
+    display: none !important;
+}
+
 .vw-menu {
     background: rgba(15, 18, 26, 0.96);
     border: 1px solid rgba(255,255,255,0.12);
@@ -966,6 +978,28 @@ body.vw-menu-open #overlay span {
     color: rgba(226,232,240,0.78);
     font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     white-space: pre-wrap;
+}
+
+.vw-menu-note {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(59,130,246,0.12);
+    border: 1px solid rgba(96,165,250,0.2);
+    color: rgba(219,234,254,0.88);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.vw-menu-note.warn {
+    background: rgba(245,158,11,0.12);
+    border-color: rgba(245,158,11,0.24);
+    color: #fde68a;
+}
+
+.vw-menu-note.error {
+    background: rgba(239,68,68,0.12);
+    border-color: rgba(248,113,113,0.26);
+    color: #fecaca;
 }
 
 @media (max-width: 720px) {

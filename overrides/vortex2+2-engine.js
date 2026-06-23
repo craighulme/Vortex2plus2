@@ -1438,6 +1438,7 @@ const settingsStatus = document.getElementById('vw-session-status');
 const reloadNotice = document.getElementById('vw-reload-notice');
 const audioOutputSelect = document.getElementById('vw-audio-output');
 const audioInputSelect = document.getElementById('vw-audio-input');
+const audioStatus = document.getElementById('vw-audio-status');
 let settingsOpen = false;
 let reloadNoticeShown = false;
 
@@ -1583,6 +1584,7 @@ function routeSettingsClickUnderCursor() {
     const controls = settingsPanel.querySelectorAll('button, input, select');
     for (const control of controls) {
         if (!_cursorOver(control)) continue;
+        if (control.dataset.requiresUserGesture === 'true') return true;
         if (control.type === 'range') return true;
         control.focus?.();
         control.click?.();
@@ -1697,6 +1699,7 @@ function makeButtonRow(buttons, target = settingsTargets.dev) {
         el.type = 'button';
         el.className = `vw-small-button${button.primary ? ' primary' : ''}`;
         el.textContent = button.label;
+        if (button.requiresUserGesture) el.dataset.requiresUserGesture = 'true';
         el.onclick = button.onclick;
         row.appendChild(el);
     }
@@ -1725,6 +1728,13 @@ function volumeLabel(value) {
 
 function selectedAudioOutputId() {
     return localStorage.getItem('v22AudioOutput') || '';
+}
+
+function setAudioStatus(message, tone = '') {
+    if (!audioStatus) return;
+    audioStatus.textContent = message;
+    audioStatus.classList.toggle('warn', tone === 'warn');
+    audioStatus.classList.toggle('error', tone === 'error');
 }
 
 async function applyAudioOutputTo(audio) {
@@ -1756,6 +1766,12 @@ function applyAudioVolumes() {
 
 async function populateAudioDevices() {
     if (!audioOutputSelect || !audioInputSelect) return;
+    if (!navigator.mediaDevices?.enumerateDevices) {
+        audioOutputSelect.innerHTML = '<option value="">Default output</option>';
+        audioInputSelect.innerHTML = '<option value="">Default microphone</option>';
+        setAudioStatus('This browser does not expose audio device selection on this page.', 'warn');
+        return;
+    }
     const devices = navigator.mediaDevices?.enumerateDevices
         ? await navigator.mediaDevices.enumerateDevices()
         : [];
@@ -1780,23 +1796,41 @@ async function populateAudioDevices() {
 
     fillSelect(audioOutputSelect, 'audiooutput', selectedOutput, 'output');
     fillSelect(audioInputSelect, 'audioinput', selectedInput, 'microphone');
+    const outputCount = devices.filter((device) => device.kind === 'audiooutput').length;
+    const inputCount = devices.filter((device) => device.kind === 'audioinput').length;
+    const canRouteOutput = typeof HTMLMediaElement !== 'undefined' && typeof HTMLMediaElement.prototype.setSinkId === 'function';
+    if (!canRouteOutput) {
+        setAudioStatus('Output device switching is not supported by this browser. The default output will be used.', 'warn');
+    } else if (inputCount === 0 && outputCount === 0) {
+        setAudioStatus('No audio devices were exposed yet. Click Enable microphone list so the browser can ask permission.', 'warn');
+    } else {
+        setAudioStatus(`Found ${inputCount || 1} microphone option(s) and ${outputCount || 1} output option(s).`);
+    }
 }
 
 async function requestMicrophoneDeviceList() {
     if (!navigator.mediaDevices?.getUserMedia) {
+        setAudioStatus('Microphone selection is not supported by this browser on this page.', 'error');
         window.Chat?.warn?.('Microphone selection is not supported in this browser.');
         return false;
     }
     let stream = null;
     try {
+        setAudioStatus('Waiting for browser microphone permission...');
         const deviceId = localStorage.getItem('v22AudioInput') || undefined;
         stream = await navigator.mediaDevices.getUserMedia({
             audio: deviceId ? { deviceId: { exact: deviceId } } : true
         });
         await populateAudioDevices();
+        setAudioStatus('Microphone permission granted. Device lists have been refreshed.');
         return true;
     } catch (err) {
         console.warn('[audio] microphone permission failed', err);
+        const name = err?.name || 'PermissionError';
+        const detail = name === 'NotAllowedError'
+            ? 'The browser blocked microphone access. Check the site permission icon in the address bar, then try again.'
+            : `Microphone request failed: ${name}`;
+        setAudioStatus(detail, 'error');
         window.Chat?.warn?.('Microphone permission was not granted.');
         return false;
     } finally {
@@ -1807,19 +1841,22 @@ async function requestMicrophoneDeviceList() {
 async function testAudioOutput() {
     window.canPlaySounds = true;
     applyAudioVolumes();
-    await applyAudioOutputTo(clickSound);
+    const routed = await applyAudioOutputTo(clickSound);
     try {
         clickSound.currentTime = 0;
         await clickSound.play();
+        setAudioStatus(routed ? 'Played test sound through the selected output.' : 'Played test sound through the browser default output.', routed ? '' : 'warn');
     } catch (err) {
         console.warn('[audio] test output failed', err);
+        setAudioStatus('The browser blocked the test sound. Click in the game once, then try again.', 'error');
     }
 }
 
 if (audioOutputSelect) {
     audioOutputSelect.onchange = async () => {
         localStorage.setItem('v22AudioOutput', audioOutputSelect.value);
-        await applyAudioOutputToAll();
+        const routed = await applyAudioOutputToAll();
+        setAudioStatus(routed || !audioOutputSelect.value ? 'Output device saved.' : 'Output saved, but this browser did not apply it to existing sounds.', routed ? '' : 'warn');
     };
 }
 
@@ -1850,8 +1887,8 @@ makeSettingsSlider('Chat volume', 0, 1, 1, 0.05, function (slider, val) {
 
 makeButtonRow([
     { label: 'Refresh devices', onclick: () => populateAudioDevices().catch(() => {}) },
-    { label: 'Enable microphone list', onclick: () => requestMicrophoneDeviceList() },
-    { label: 'Test output', primary: true, onclick: () => testAudioOutput() },
+    { label: 'Enable microphone list', onclick: () => requestMicrophoneDeviceList(), requiresUserGesture: true },
+    { label: 'Test output', primary: true, onclick: () => testAudioOutput(), requiresUserGesture: true },
 ], settingsTargets.audio);
 
 makeSelectControl('Tone mapping', toneMappingMode, [
@@ -3125,6 +3162,7 @@ async function loadMapVortex(path, tx = 0, ty = 0, tz = 0) {
 
 overlay.addEventListener('click', () => {
     window.canPlaySounds = true;
+    document.body.classList.add('vw-game-started');
     if (window.SWORD_FIGHT || window.BUILD_MODE) {
         if (!gameSong) {
             gameSong = new Audio(window.SWORD_FIGHT && importedAssets.sfothSong || importedAssets.buildSong);
