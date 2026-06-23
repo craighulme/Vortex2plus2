@@ -12,7 +12,9 @@ function setupNav(userId) {
   if (myProfileBtn) {
     myProfileBtn.href = '/users/' + userId + '/profile';
   }
-  document.getElementById('logout-btn').addEventListener('click', async () => {
+  const logoutBtn = document.getElementById('logout-btn');
+  if (!logoutBtn) return;
+  logoutBtn.addEventListener('click', async () => {
     await fetch('/logout', {
       'method': 'POST'
     });

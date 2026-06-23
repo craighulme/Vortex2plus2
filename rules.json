@@ -313,6 +313,26 @@
     }
   },
   {
+    "id": 18,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "extensionPath": "/overrides/social.js"
+      }
+    },
+    "condition": {
+      "urlFilter": "social.js",
+      "resourceTypes": [
+        "script"
+      ],
+      "initiatorDomains": [
+        "playvortex.io",
+        "vortex.towerstats.com"
+      ]
+    }
+  },
+  {
     "id": 100,
     "priority": 3,
     "action": {
