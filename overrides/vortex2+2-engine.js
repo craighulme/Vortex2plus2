@@ -76,13 +76,44 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = enableShadows;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
-renderer.toneMapping = THREE.AgXToneMapping;
 document.getElementById("scene").appendChild(renderer.domElement);
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+function readToneMappingMode() {
+    const value = String(localStorage.getItem('v22ToneMapping') || 'none').toLowerCase();
+    return value === 'agx' || value === 'aces' ? value : 'none';
+}
+
+function toneMappingConstant(mode) {
+    if (mode === 'agx' && THREE.AgXToneMapping !== undefined) return THREE.AgXToneMapping;
+    if (mode === 'aces' && THREE.ACESFilmicToneMapping !== undefined) return THREE.ACESFilmicToneMapping;
+    return THREE.NoToneMapping;
+}
+
+let toneMappingMode = readToneMappingMode();
+renderer.toneMapping = toneMappingConstant(toneMappingMode);
+
+function markSceneMaterialsForShaderUpdate(root = scene) {
+    root.traverse?.((obj) => {
+        const material = obj.material;
+        if (!material) return;
+        const materials = Array.isArray(material) ? material : [material];
+        for (const mat of materials) mat.needsUpdate = true;
+    });
+}
+
+function setToneMappingMode(mode) {
+    const next = String(mode || '').toLowerCase();
+    toneMappingMode = next === 'agx' || next === 'aces' ? next : 'none';
+    renderer.toneMapping = toneMappingConstant(toneMappingMode);
+    localStorage.setItem('v22ToneMapping', toneMappingMode);
+    markSceneMaterialsForShaderUpdate();
+    return toneMappingMode;
+}
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.45);
 scene.add(ambient);
@@ -101,8 +132,11 @@ sun.shadow.camera.top = s;
 sun.shadow.camera.bottom = -s;
 sun.shadow.autoUpdate = enableShadows;
 sun.shadow.bias = -0.000002;
-sun.target = camera;
 scene.add(sun);
+const sunTarget = new THREE.Object3D();
+sunTarget.position.set(0, 0, 0);
+scene.add(sunTarget);
+sun.target = sunTarget;
 const backLight = new THREE.DirectionalLight(0xffffff, 0.4);
 backLight.position.set(-160, 500, -160);
 backLight.castShadow = false;
@@ -131,6 +165,14 @@ function setShadowsEnabled(value) {
     localStorage.setItem('enableShadows', enableShadows ? 'yes' : 'no');
     syncSceneShadowFlags();
     return enableShadows;
+}
+
+function updateLightingForFrame() {
+    if (!shadowsActive()) return;
+    sun.position.set(camera.position.x + 50, camera.position.y + 100, camera.position.z + 50);
+    sunTarget.position.copy(camera.position);
+    sunTarget.updateMatrixWorld();
+    sun.updateMatrixWorld();
 }
 
 const VortexPerf = window.VortexPerf || {};
@@ -1241,6 +1283,10 @@ const cam = {
     minDist: 2,
     maxDist: 512,
 };
+const moveInput = new THREE.Vector3();
+const upAxis = new THREE.Vector3(0, 1, 0);
+const yawQuat = new THREE.Quaternion();
+const cameraPivot = new THREE.Vector3();
 
 const runtimeInput = window.VortexRuntime && window.VortexRuntime.input;
 if (runtimeInput && typeof runtimeInput.attachTarget === 'function') {
@@ -1936,7 +1982,7 @@ function resolveOBBH(nearby) {
         const fy = character.position.y - CHAR_FOOT_OFFSET;
         const stepNeeded = b.maxY - fy;
         if (stepNeeded > 0 && stepNeeded <= STEP_HEIGHT && grounded && velY <= 0) {
-            if (b.maxY + CHAR_FOOT_OFFSET > stepUpTarget) { stepUpTarget = b.maxY + CHAR_FOOT_OFFSET; console.log('stepup') }
+            if (b.maxY + CHAR_FOOT_OFFSET > stepUpTarget) stepUpTarget = b.maxY + CHAR_FOOT_OFFSET;
             continue;
         }
         character.position.x += nx * depth;
@@ -2277,7 +2323,7 @@ function update(dt) {
         return;
     }
 
-    const moveInput = new THREE.Vector3();
+    moveInput.set(0, 0, 0);
     if (keys['KeyW'] || keys['ArrowUp']) moveInput.z -= 1;
     if (keys['KeyS'] || keys['ArrowDown']) moveInput.z += 1;
     if (keys['KeyA']) moveInput.x -= 1;
@@ -2289,9 +2335,7 @@ function update(dt) {
     if (movementMods.fly || movementMods.noclip || movementMods.airwalk) stepUpTarget = -Infinity;
     if (moving) {
         moveInput.normalize();
-        const yawQuat = new THREE.Quaternion().setFromAxisAngle(
-            new THREE.Vector3(0, 1, 0), cam.yaw
-        );
+        yawQuat.setFromAxisAngle(upAxis, cam.yaw);
         moveInput.applyQuaternion(yawQuat);
 
         velX = moveInput.x * movementSpeed;
@@ -2456,7 +2500,7 @@ function updateCamera(dt) {
     const sinPitch = Math.sin(cam.pitch);
     const cosPitch = Math.cos(cam.pitch);
 
-    const pivot = new THREE.Vector3(
+    const pivot = cameraPivot.set(
         character.position.x,
         character.position.y + CAM_PIVOT_Y + CAM_REFERENCE_FOOT_OFFSET - CHAR_FOOT_OFFSET,
         character.position.z
@@ -2585,10 +2629,7 @@ function loop(now) {
     window._mpUpdate?.(dt);
     VortexPerf.mark(perfFrame, "multiplayer");
 
-    sun.position.set(camera.position.x + 50, camera.position.y + 100, camera.position.z + 50);
-    camera.updateMatrixWorld();
-    sun.target.updateMatrixWorld();
-    if (shadowsActive()) sun.updateMatrixWorld();
+    updateLightingForFrame();
     VortexPerf.mark(perfFrame, "lighting");
     renderer.render(scene, camera);
     VortexPerf.mark(perfFrame, "render");
@@ -2791,6 +2832,7 @@ window.VortexQuality = {
             shadows: shadowsActive(),
             antialias: readStorageFlag('v22Antialias', false),
             pixelRatio: renderer.getPixelRatio(),
+            toneMapping: toneMappingMode,
             shadowMapSize,
             avatarRenderer: _avatarRenderer,
             perfProfiler: !!VortexPerf.enabled,
@@ -2811,14 +2853,19 @@ window.VortexQuality = {
     setAvatarRenderer(mode) {
         return _setAvatarRenderer(mode);
     },
+    setToneMapping(mode) {
+        return setToneMappingMode(mode);
+    },
     performance() {
         setShadowsEnabled(false);
         localStorage.setItem('v22Antialias', '0');
+        setToneMappingMode('none');
         return this.get();
     },
     visual() {
         setShadowsEnabled(true);
         localStorage.setItem('v22Antialias', '1');
+        setToneMappingMode('agx');
         return this.get();
     },
 };
