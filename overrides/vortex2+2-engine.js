@@ -1275,6 +1275,9 @@ if (runtimeInput && typeof runtimeInput.attachTarget === 'function') {
 }
 const keys = runtimeInput && runtimeInput.keys || {};
 let mouseLock = false;
+let pendingResumeClick = false;
+let suppressPauseOpenUntil = 0;
+let lastPointerLockExitAt = 0;
 
 function requestGamePointerLock() {
     if (runtimeInput && typeof runtimeInput.requestPointerLock === 'function') {
@@ -1315,19 +1318,43 @@ document.addEventListener('keydown', e => {
 });
 
 document.addEventListener('vortex-input-pointerlock-error', (event) => {
-    console.warn('[pointer-lock] request failed', event.detail && event.detail.error);
-    setSettingsOpen(true);
+    const error = event.detail && event.detail.error;
+    const message = String(error?.message || error || '');
+    console.warn('[pointer-lock] request failed', error);
+    if (error?.name === 'SecurityError' && message.includes('immediately after')) {
+        pendingResumeClick = true;
+        suppressPauseOpenUntil = performance.now() + 700;
+        syncPauseOverlay();
+        return;
+    }
+    openPauseMenu();
 });
+
+renderer.domElement.addEventListener('pointerdown', (event) => {
+    if (settingsOpen || document.pointerLockElement) return;
+    if (window.canPlaySounds && !pendingResumeClick) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    pendingResumeClick = false;
+    startGameSession();
+}, true);
+
+function openPauseMenu() {
+    pendingResumeClick = false;
+    setSettingsOpen(true);
+}
 
 document.addEventListener('pointerlockchange', () => {
     window.locked = runtimeInput && typeof runtimeInput.isLocked === 'function'
         ? runtimeInput.isLocked()
         : !!document.pointerLockElement;
     if (window.locked) {
+        pendingResumeClick = false;
         cursorEl.style.transform = `translate(${cursorX}px, ${cursorY}px)`;
     } else {
+        lastPointerLockExitAt = performance.now();
         rmb = false;
-        if (!settingsOpen) setSettingsOpen(true);
+        if (!settingsOpen && window.canPlaySounds && performance.now() > suppressPauseOpenUntil) openPauseMenu();
     }
     syncPauseOverlay();
 });
@@ -1441,8 +1468,9 @@ let reloadNoticeShown = false;
 
 function syncPauseOverlay() {
     if (!overlay) return;
-    overlay.style.opacity = settingsOpen || !window.locked ? 1 : 0;
-    overlay.style.pointerEvents = settingsOpen || !window.locked ? 'auto' : 'none';
+    const shouldBlock = settingsOpen || pendingResumeClick || (!window.locked && !window.canPlaySounds);
+    overlay.style.opacity = settingsOpen ? 1 : 0;
+    overlay.style.pointerEvents = shouldBlock ? 'auto' : 'none';
 }
 
 function inferSettingsTarget(label) {
@@ -1472,14 +1500,23 @@ function setSettingsOpen(open, options = {}) {
     settingsPanel.style.display = settingsOpen ? '' : 'none';
     settingsPanel.setAttribute('aria-hidden', settingsOpen ? 'false' : 'true');
     document.body.classList.toggle('vw-menu-open', settingsOpen);
-    syncPauseOverlay();
     if (settingsOpen) {
+        pendingResumeClick = false;
         refreshSettingsStatus();
         populateAudioDevices().catch(() => {});
-        if (document.pointerLockElement) document.exitPointerLock?.();
+        if (document.pointerLockElement) {
+            suppressPauseOpenUntil = performance.now() + 700;
+            document.exitPointerLock?.();
+        }
     } else if (options.resume) {
-        startGameSession();
+        pendingResumeClick = true;
+        suppressPauseOpenUntil = performance.now() + 700;
+        if (options.immediate && performance.now() - lastPointerLockExitAt > 700) {
+            pendingResumeClick = false;
+            startGameSession();
+        }
     }
+    syncPauseOverlay();
 }
 
 function toggleSettingsMenu() {
@@ -1530,7 +1567,7 @@ settingsPanel.addEventListener('click', (event) => {
     }
     const action = event.target.closest?.('[data-menu-action]')?.dataset.menuAction;
     if (!action) return;
-    if (action === 'resume') setSettingsOpen(false, { resume: true });
+    if (action === 'resume') setSettingsOpen(false, { resume: true, immediate: true });
     if (action === 'reset-character') {
         resetCharacterToSpawn();
         refreshSettingsStatus();
@@ -1549,8 +1586,8 @@ document.addEventListener('keydown', (event) => {
 }, true);
 
 document.addEventListener('pointerlockchange', () => {
-    if (!document.pointerLockElement && !settingsOpen && window.canPlaySounds) {
-        setSettingsOpen(true);
+    if (!document.pointerLockElement && !settingsOpen && window.canPlaySounds && performance.now() > suppressPauseOpenUntil) {
+        openPauseMenu();
     }
 });
 
@@ -2011,7 +2048,7 @@ applyAudioOutputTo(slashSound);
 applyAudioOutputTo(clickSound);
 applyAudioOutputTo(oofSound);
 applyAudioVolumes();
-setSettingsOpen(true);
+setSettingsOpen(false);
 
 
 var raycaster = new THREE.Raycaster();
@@ -3209,13 +3246,15 @@ async function loadMapVortex(path, tx = 0, ty = 0, tz = 0) {
 
 overlay.addEventListener('click', () => {
     if (settingsOpen) return;
+    pendingResumeClick = false;
     startGameSession();
 });
 if (runtimeInput && typeof runtimeInput.attachOverlay === 'function') {
-    runtimeInput.attachOverlay(overlay, () => false);
+    runtimeInput.attachOverlay(overlay, () => settingsOpen || pendingResumeClick || !window.canPlaySounds);
 } else {
     overlay.addEventListener('pointerdown', () => {
         if (settingsOpen) return;
+        pendingResumeClick = false;
         startGameSession();
     });
 }
