@@ -49,4 +49,21 @@ describe("MultiplayerService", () => {
       }
     ]);
   });
+
+  it("validates and converts remote scene positions", () => {
+    const multiplayer = new MultiplayerService();
+
+    expect(multiplayer.readRemoteScenePosition({ x: 10, y: 20, z: 30, ry: 1 }, (y) => y - 2)).toEqual({
+      state: { pos: { x: 10, y: 18, z: 30 }, ry: 1 },
+      reason: ""
+    });
+    expect(multiplayer.readRemoteScenePosition({ x: 10, y: -9999, z: 30, ry: 1 }, (y) => y)).toEqual({
+      state: null,
+      reason: "below-scene-floor"
+    });
+    expect(multiplayer.readRemoteScenePosition({ x: Number.NaN, y: 20, z: 30, ry: 1 }, (y) => y)).toEqual({
+      state: null,
+      reason: "non-finite-position"
+    });
+  });
 });

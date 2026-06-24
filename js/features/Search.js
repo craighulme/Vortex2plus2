@@ -12,7 +12,7 @@
         } catch { }
     }
 
-    async function getLatestUser(max = 10000) {
+    async function getLatestUser(max = 100000) {
         let low = 1, high = max, highest = 0;
         while (low <= high) {
             const mid = Math.floor((low + high) / 2);

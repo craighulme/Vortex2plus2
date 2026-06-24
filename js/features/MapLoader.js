@@ -64,13 +64,14 @@ function loadMapRaw(name, r, tx=0, ty=1.6, tz=0, options = {}) {
     const materials = new Map();
     for (let i = 0; i < mapsLoaded[name].meshes.length; i++) {
         let mesh = mapsLoaded[name].meshes[i];
-        let key = mesh.material.uuid;
+        const disableCastShadow = mesh.userData?.v22DisableCastShadow === true;
+        let key = `${mesh.material.uuid}|cast:${disableCastShadow ? 0 : 1}`;
         mesh.updateMatrix();
         const geo = mesh.geometry.clone();
         geo.applyMatrix4(mesh.matrix);
 
         if (!materials.has(key)) {
-            materials.set(key, mesh.material);
+            materials.set(key, { material: mesh.material, disableCastShadow });
             geometries.set(key, [geo]);
         } else {
             geometries.set(key, [...geometries.get(key), geo]);
@@ -82,9 +83,13 @@ function loadMapRaw(name, r, tx=0, ty=1.6, tz=0, options = {}) {
         for (const geo of value) geo.dispose?.();
         merged.computeBoundingBox?.();
         merged.computeBoundingSphere?.();
-        const mergedMesh = new THREE.Mesh(merged, materials.get(key));
+        const materialInfo = materials.get(key);
+        const mergedMesh = new THREE.Mesh(merged, materialInfo.material);
         const shadows = !!window._vortex?.getShadowsEnabled?.();
-        mergedMesh.castShadow = shadows;
+        if (materialInfo.disableCastShadow) {
+            mergedMesh.userData.v22DisableCastShadow = true;
+        }
+        mergedMesh.castShadow = shadows && !materialInfo.disableCastShadow;
         mergedMesh.receiveShadow = shadows;
         mergedMesh.matrixAutoUpdate = false;
         mergedMesh.updateMatrix();
@@ -93,6 +98,7 @@ function loadMapRaw(name, r, tx=0, ty=1.6, tz=0, options = {}) {
         objects.push(mergedMesh);
         mapsLoaded[name].meshes=[...mapsLoaded[name].meshes,mergedMesh];
     })
+    queueMicrotask(() => window.VortexQuality?.recoverMaterials?.());
     mapsLoaded[name].translation = preserveWorldCoords ? [0, 0, 0] : [ox+tx,oy+ty,oz+tz];
     return mapsLoaded[name];
 }
@@ -549,7 +555,9 @@ async function initialize() {
                         getCachedGeo(320, 3.2, 320),
                         getCachedMats(320, 3.2, 320, 0x4db84b)
                     );
-                    ground.receiveShadow = true;
+                    ground.userData.v22DisableCastShadow = true;
+                    ground.castShadow = false;
+                    ground.receiveShadow = !!window._vortex?.getShadowsEnabled?.();
                     scene.add(ground);
                 }
 
@@ -573,7 +581,9 @@ async function initialize() {
                     getCachedGeo(320, 3.2, 320),
                     getCachedMats(320, 3.2, 320, 0x4db84b)
                 );
-                ground.receiveShadow = true;
+                ground.userData.v22DisableCastShadow = true;
+                ground.castShadow = false;
+                ground.receiveShadow = !!window._vortex?.getShadowsEnabled?.();
                 scene.add(ground);
                 window._vortex.setSpawn(0, 10, 0, 0);
             }

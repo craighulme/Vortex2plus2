@@ -54,7 +54,7 @@ const importedAssets = {
 const overrides = new Map([
     ["boot.iife.js", "overrides/v22-runtime/boot.iife.js"],
 
-    ["three.min.js", "overrides/libs/three.module.js"],
+    ["three.min.js", "overrides/libs/three.webgpu.js"],
     ["FBXLoader.js", "overrides/libs/FBXLoader.js"],
     ["GLTFLoader.js", "overrides/libs/GLTFLoader.js"],
     ["inflate.min.js", "overrides/libs/inflate.min.js"],

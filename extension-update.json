@@ -1,15 +1,13 @@
 {
-  "version": "0.4.5",
+  "version": "0.4.6",
   "date": "2026-06-24",
   "url": "https://github.com/craighulme/Vortex-Web",
-  "title": "Vortex Web runtime and community update",
-  "summary": "Vortex Web continues the move away from the old 2+2 client with runtime migration work, profile cosmetics, cleaner in-game UI foundations, and hosted multiplayer improvements.",
+  "title": "Vortex Web graphics and runtime update",
+  "summary": "Vortex Web continues moving toward the new web-client runtime with WebGPU renderer work, improved shadows, and profile cosmetic fixes.",
   "changelog": [
-    "Added Vortex Web profile cosmetics, including badges, name gradients, effects, nameplates, and profile backgrounds.",
-    "Added badge selection controls, including the option to hide your selected badge, with more reliable profile-page controls.",
-    "Improved leaderboard cosmetic rendering so selected badges and nameplates can appear in game.",
-    "Continued moving input, settings, HUD, physics, chat, and leaderboard foundations into the new web-client runtime.",
-    "Added Rapier-backed runtime physics plumbing and client-side test utilities while keeping gameplay compatibility first.",
-    "Tightened hosted relay and community-profile flows without exposing implementation details in the client."
+    "Started the in-game renderer move to WebGPU.",
+    "Added improved cascaded shadows with selectable shadow quality.",
+    "Fixed several profile cosmetic and badge selection issues.",
+    "Continued moving runtime systems out of the old 2+2 engine files."
   ]
 }

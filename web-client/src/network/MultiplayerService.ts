@@ -46,6 +46,16 @@ export type RemoteDebugRow = {
   mesh: VectorSnapshot | null;
 };
 
+export type RemoteSceneState = {
+  pos: VectorSnapshot;
+  ry: number;
+};
+
+export type RemoteScenePositionResult = {
+  state: RemoteSceneState | null;
+  reason: string;
+};
+
 type VectorSnapshot = {
   x: number;
   y: number;
@@ -172,10 +182,33 @@ export class MultiplayerService {
     });
   }
 
+  readRemoteScenePosition(
+    playerData: RemoteRawState | null | undefined,
+    convertNativeYToSceneY: (nativeY: number) => number
+  ): RemoteScenePositionResult {
+    if (![playerData?.x, playerData?.y, playerData?.z, playerData?.ry].every(Number.isFinite)) {
+      return { state: null, reason: "non-finite-position" };
+    }
+    const data = playerData as Required<RemoteRawState>;
+    const x = Number(data.x);
+    const y = convertNativeYToSceneY(Number(data.y));
+    const z = Number(data.z);
+    const ry = Number(data.ry);
+    if (![x, y, z, ry].every(Number.isFinite)) return { state: null, reason: "converted-non-finite-position" };
+    if (Math.abs(x) > REMOTE_MAX_ABS_COORD || Math.abs(y) > REMOTE_MAX_ABS_COORD || Math.abs(z) > REMOTE_MAX_ABS_COORD) {
+      return { state: null, reason: "out-of-range-position" };
+    }
+    if (y < REMOTE_MIN_SCENE_Y) return { state: null, reason: "below-scene-floor" };
+    return { state: { pos: { x, y, z }, ry }, reason: "" };
+  }
+
   reset(): void {
     this.messages.length = 0;
   }
 }
+
+const REMOTE_MIN_SCENE_Y = -250;
+const REMOTE_MAX_ABS_COORD = 100000;
 
 function readId(value: unknown): number {
   if (!value || typeof value !== "object") return 0;

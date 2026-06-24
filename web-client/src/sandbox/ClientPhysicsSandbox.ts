@@ -146,10 +146,10 @@ export class ClientPhysicsSandbox {
 
     const origin = readPlayerSpawn(runtime);
     const geometry = new THREE.SphereGeometry(0.9, 32, 18);
-    const materialOptions: Record<string, unknown> = { color: 0xffffff, shininess: 55 };
+    const materialOptions: Record<string, unknown> = { color: 0xffffff, roughness: 0.42, metalness: 0 };
     const texture = createFootballTexture(THREE);
     if (texture) materialOptions.map = texture;
-    const material = new THREE.MeshPhongMaterial(materialOptions);
+    const material = new THREE.MeshStandardMaterial(materialOptions);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = "VortexWebSandboxFootball";
     mesh.castShadow = true;

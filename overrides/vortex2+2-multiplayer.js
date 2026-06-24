@@ -141,9 +141,25 @@ function makeRemote(username, id, avatar) {
     const shirtMesh = _vortex.buildShirtOverlay(grp);
     const pantsMesh = _vortex.buildPantsOverlay?.(grp);
     const faceMesh = _vortex.buildFaceOverlay?.(grp);
-    const meshes = { grp, bones, rest, shirtMesh, pantsMesh, faceMesh };
+    const meshes = { grp, bones, rest, shirtMesh, pantsMesh, faceMesh, nameSprite: spr };
     _vortex.applyAvatarToMeshes?.(meshes, avatar);
     return meshes;
+}
+
+function _setRemoteNameLabel(remote, username) {
+    if (!remote?.meshes?.grp) return;
+    const oldSprite = remote.meshes.nameSprite;
+    if (oldSprite) {
+        oldSprite.parent?.remove(oldSprite);
+        oldSprite.material?.map?.dispose?.();
+        oldSprite.material?.dispose?.();
+    }
+    const spr = _makeNameLabel(username);
+    const fo = _vortex.getCharFootOffset();
+    const ch = _vortex.getCharHeight();
+    spr.position.y = ch - fo + 1.4;
+    remote.meshes.grp.add(spr);
+    remote.meshes.nameSprite = spr;
 }
 
 function disposeRemote(m) {
@@ -526,6 +542,7 @@ let hubMode = false;
 
 const _pendingAvatars = new Map();
 const _pendingBubbles = new Map();
+const _knownPlayerNames = new Map();
 
 let _friendIds = new Set();
 let _incomingIds = new Set();
@@ -536,6 +553,49 @@ function _statusFor(id) {
     if (_incomingIds.has(id)) return 'request_received';
     if (_outgoingIds.has(id)) return 'request_sent';
     return 'none';
+}
+
+function _isPlaceholderPlayerName(id, value) {
+    const raw = String(value || "").trim();
+    if (!raw) return true;
+    const lower = raw.toLowerCase();
+    const idText = String(id);
+    return raw === idText ||
+        raw === `#${idText}` ||
+        lower === `user${idText}` ||
+        lower === `#user${idText}` ||
+        lower === "browserplayer";
+}
+
+function _rememberPlayerName(id, username) {
+    const playerId = Number(id);
+    if (!Number.isFinite(playerId) || playerId <= 0) return "";
+    const name = String(username || "").trim();
+    if (_isPlaceholderPlayerName(playerId, name)) return _knownPlayerNames.get(playerId) || "";
+    _knownPlayerNames.set(playerId, name);
+    return name;
+}
+
+function _playerDisplayName(id, username) {
+    const playerId = Number(id);
+    if (!Number.isFinite(playerId) || playerId <= 0) return String(username || "").trim();
+    const remembered = _rememberPlayerName(playerId, username);
+    return remembered || _knownPlayerNames.get(playerId) || `#${playerId}`;
+}
+
+function _applyKnownPlayerName(id, username) {
+    const playerId = Number(id);
+    if (!Number.isFinite(playerId) || playerId <= 0) return;
+    const name = _rememberPlayerName(playerId, username);
+    if (!name) return;
+    const remote = remotes.get(playerId);
+    if (remote && remote.username !== name) {
+        remote.username = name;
+        _setRemoteNameLabel(remote, name);
+    }
+    const pending = _pendingAvatars.get(playerId);
+    if (pending) pending.username = name;
+    Leaderboard.addPlayer({ id: playerId, username: name, is_staff: remote?.is_staff, is_booster: remote?.is_booster });
 }
 
 async function fetchFriendData() {
@@ -2208,11 +2268,16 @@ function removeBlocks(userid) {
 
 const url = new URL(document.URL);
 const gamei = url.searchParams.get("V22GameId");
-const REMOTE_MIN_SCENE_Y = -250;
-const REMOTE_MAX_ABS_COORD = 100000;
 const _badRemoteStateLog = new Map();
 
 function readRemoteScenePositionResult(playerData) {
+    const runtimeMultiplayer = window.VortexRuntime?.multiplayer;
+    if (runtimeMultiplayer?.readRemoteScenePosition) {
+        const result = runtimeMultiplayer.readRemoteScenePosition(playerData, _nativeYToSceneY);
+        if (!result.state) return result;
+        const pos = result.state.pos;
+        return { state: { pos: new THREE.Vector3(pos.x, pos.y, pos.z), ry: result.state.ry }, reason: "" };
+    }
     if (![playerData?.x, playerData?.y, playerData?.z, playerData?.ry].every(Number.isFinite)) {
         return { state: null, reason: "non-finite-position" };
     }
@@ -2221,10 +2286,10 @@ function readRemoteScenePositionResult(playerData) {
     const z = Number(playerData.z);
     const ry = Number(playerData.ry);
     if (![x, y, z, ry].every(Number.isFinite)) return { state: null, reason: "converted-non-finite-position" };
-    if (Math.abs(x) > REMOTE_MAX_ABS_COORD || Math.abs(y) > REMOTE_MAX_ABS_COORD || Math.abs(z) > REMOTE_MAX_ABS_COORD) {
+    if (Math.abs(x) > 100000 || Math.abs(y) > 100000 || Math.abs(z) > 100000) {
         return { state: null, reason: "out-of-range-position" };
     }
-    if (y < REMOTE_MIN_SCENE_Y) return { state: null, reason: "below-scene-floor" };
+    if (y < -250) return { state: null, reason: "below-scene-floor" };
     return { state: { pos: new THREE.Vector3(x, y, z), ry }, reason: "" };
 }
 
@@ -2488,10 +2553,11 @@ function handle(d) {
 
         case 'init': {
             myId = d.id;
+            const selfName = _playerDisplayName(myId, d.username || launchInfo?.username || "You");
             if (!launchInfo || launchInfo.localRelayPending) {
                 launchInfo = {
                     id: d.id,
-                    username: d.username,
+                    username: selfName,
                     gameId: d.game_id || d.gameId || Number(window.GAME_ID || 0),
                     shirtId: d.shirt_id || 0,
                     pantId: d.pant_id || 0,
@@ -2503,7 +2569,7 @@ function handle(d) {
                 };
             }
             Leaderboard.setMyId(myId);
-            Leaderboard.addPlayer({ id: myId, username: d.username, is_staff: d.is_staff, is_booster: d.is_booster });
+            Leaderboard.addPlayer({ id: myId, username: selfName, is_staff: d.is_staff, is_booster: d.is_booster });
             const initialPlayers = Array.isArray(d.players) ? d.players : [];
             _recordReplicatedPlayers("init", [d, ...initialPlayers]);
             _vortex.prefetchAvatarImages?.([d, ...initialPlayers]);
@@ -2532,7 +2598,8 @@ function handle(d) {
             _vortex.prefetchAvatarImages?.(d);
             addRemote(d.id, d.username, d.is_staff, d.is_booster, d);
             _showHealthBar(d.id);
-            Chat.systemPlayer(d.username, `${d.username} joined.`);
+            const joinName = _playerDisplayName(d.id, d.username);
+            Chat.systemPlayer(joinName, `${joinName} joined.`);
             break;
         }
 
@@ -2592,10 +2659,12 @@ function handle(d) {
         }
 
         case 'chat': {
+            _applyKnownPlayerName(d.id, d.username);
             if (d.id !== myId && !remotes.has(d.id)) {
                 addRemote(d.id, d.username, d.is_staff, d.is_booster, {});
             }
-            Chat.message(d.username, d.msg, d.id === myId, d.is_staff, d.is_owner, d.is_booster);
+            const chatName = _playerDisplayName(d.id, d.username);
+            Chat.message(chatName, d.msg, d.id === myId, d.is_staff, d.is_owner, d.is_booster);
             if (d.id === myId || remotes.has(d.id)) {
                 _showBubble(d.id, d.msg);
             } else {
@@ -2692,19 +2761,24 @@ window._mpSetFriendStatus = function (id, status) {
 };
 
 function addRemote(id, username, is_staff, is_booster, avatarData) {
+    const displayName = _playerDisplayName(id, username);
     if (remotes.has(id)) {
         const r = remotes.get(id);
-        r.username = username || r.username;
+        if (displayName && displayName !== r.username) {
+            r.username = displayName;
+            _setRemoteNameLabel(r, displayName);
+        }
         r.is_staff = is_staff ?? r.is_staff;
         r.is_booster = is_booster ?? r.is_booster;
         decodeNetworkData(avatarData || {}, r, "addRemote");
+        Leaderboard.addPlayer({ id, username: r.username, is_staff: r.is_staff, is_booster: r.is_booster });
         return;
     }
     const avatar = _normalizeAvatarFields(avatarData);
     const initialState = readRemoteScenePosition(avatarData || {});
     let meshes = null;
-    if (_vortex.getCharacter()) { try { meshes = makeRemote(username, id, avatar); } catch (e) { console.error('[mp] makeRemote failed:', e); } }
-    if (!meshes) _pendingAvatars.set(id, { username, is_staff, is_booster, ...avatar });
+    if (_vortex.getCharacter()) { try { meshes = makeRemote(displayName, id, avatar); } catch (e) { console.error('[mp] makeRemote failed:', e); } }
+    if (!meshes) _pendingAvatars.set(id, { username: displayName, is_staff, is_booster, ...avatar });
 
     const remote = {
         meshes,
@@ -2715,7 +2789,7 @@ function addRemote(id, username, is_staff, is_booster, avatarData) {
         seen: initialState ? performance.now() : 0,
         hasPosition: !!initialState,
         id: id,
-        username,
+        username: displayName,
         is_staff,
         is_booster,
         avatar,
@@ -2733,7 +2807,7 @@ function addRemote(id, username, is_staff, is_booster, avatarData) {
         }
     }
     remotes.set(id, remote);
-    Leaderboard.addPlayer({ id, username, is_staff, is_booster });
+    Leaderboard.addPlayer({ id, username: displayName, is_staff, is_booster });
     Leaderboard.setFriendStatus(id, _statusFor(id));
     if (!avatar.shirt_id) hydrateRemoteShirt(id);
 
@@ -2913,7 +2987,8 @@ window._mpUpdate = function (dt) {
             if (r && !r.meshes) {
                 try {
                     r.avatar = _normalizeAvatarFields(info);
-                    r.meshes = makeRemote(info.username, id, r.avatar);
+                    r.username = _playerDisplayName(id, info.username || r.username);
+                    r.meshes = makeRemote(r.username, id, r.avatar);
                 } catch (e) {
                     console.error('[mp] makeRemote failed:', e);
                 }

@@ -26,8 +26,9 @@ type RuntimePanelSource = {
     getHandles(): { renderer?: unknown; scene?: unknown; camera?: unknown };
     snapshot?(): {
       attached: boolean;
+      backend: string | null;
+      webgpu: boolean | null;
       pixelRatio: number | null;
-      webgl2: boolean | null;
       maxTextureSize: number | null;
       maxTextureUnits: number | null;
       maxAnisotropy: number | null;
@@ -36,6 +37,9 @@ type RuntimePanelSource = {
       geometries: number | null;
       textures: number | null;
       shadowsEnabled: boolean | null;
+      shadowQuality: string;
+      shadowMapSize: number;
+      shadowCascades: number;
     };
   };
   world: {
@@ -399,7 +403,11 @@ function formatRenderer(
 ): string {
   if (!attached) return "pending";
   if (!renderer) return "attached";
-  const api = renderer.webgl2 ? "WebGL2" : renderer.webgl2 === false ? "WebGL1" : "WebGL";
+  const api = renderer.backend
+    ? renderer.backend.toUpperCase()
+    : renderer.webgpu
+      ? "WebGPU"
+      : "Unsupported";
   const calls = renderer.drawCalls ?? "-";
   const tris = renderer.triangles ?? "-";
   const textures = renderer.textures ?? "-";

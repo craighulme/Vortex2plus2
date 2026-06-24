@@ -6,8 +6,9 @@ export type RendererHandles = {
 
 export type RendererSnapshot = {
   attached: boolean;
+  backend: string | null;
+  webgpu: boolean | null;
   pixelRatio: number | null;
-  webgl2: boolean | null;
   maxTextureSize: number | null;
   maxTextureUnits: number | null;
   maxAnisotropy: number | null;
@@ -16,20 +17,40 @@ export type RendererSnapshot = {
   geometries: number | null;
   textures: number | null;
   shadowsEnabled: boolean | null;
+  shadowQuality: ShadowQuality;
+  shadowMapSize: number;
+  shadowCascades: number;
+};
+
+export type ShadowQuality = "low" | "medium" | "high" | "ultra";
+
+export type ShadowQualityConfig = {
+  quality: ShadowQuality;
+  mapSize: number;
+  cascades: number;
+  maxFar: number;
+  lightMargin: number;
+  fade: boolean;
 };
 
 type LegacyRenderer = {
+  isWebGPURenderer?: boolean;
+  backend?: {
+    isWebGPUBackend?: boolean;
+  };
+  userData?: {
+    v22Backend?: string;
+  };
   setPixelRatio?(value: number): void;
   getPixelRatio?(): number;
   getContext?(): unknown;
   capabilities?: {
-    isWebGL2?: boolean;
     getMaxAnisotropy?(): number;
     maxTextureSize?: number;
     maxTextures?: number;
   };
   info?: {
-    render?: { calls?: number; triangles?: number };
+    render?: { calls?: number; drawCalls?: number; frameCalls?: number; triangles?: number };
     memory?: { geometries?: number; textures?: number };
   };
   shadowMap?: { enabled?: boolean };
@@ -58,12 +79,14 @@ export class RendererService {
   }
 
   snapshot(): RendererSnapshot {
+    const shadowConfig = this.getShadowConfig();
     const renderer = this.readRenderer();
     if (!renderer) {
       return {
         attached: false,
+        backend: null,
+        webgpu: null,
         pixelRatio: null,
-        webgl2: null,
         maxTextureSize: null,
         maxTextureUnits: null,
         maxAnisotropy: null,
@@ -71,23 +94,44 @@ export class RendererService {
         triangles: null,
         geometries: null,
         textures: null,
-        shadowsEnabled: null
+        shadowsEnabled: null,
+        shadowQuality: shadowConfig.quality,
+        shadowMapSize: shadowConfig.mapSize,
+        shadowCascades: shadowConfig.cascades
       };
     }
 
     return {
       attached: true,
+      backend: readRendererBackend(renderer),
+      webgpu: renderer.isWebGPURenderer ? renderer.backend?.isWebGPUBackend === true : false,
       pixelRatio: renderer.getPixelRatio?.() ?? null,
-      webgl2: renderer.capabilities?.isWebGL2 ?? readWebGl2(renderer),
-      maxTextureSize: renderer.capabilities?.maxTextureSize ?? readGlNumber(renderer, "MAX_TEXTURE_SIZE"),
-      maxTextureUnits: renderer.capabilities?.maxTextures ?? readGlNumber(renderer, "MAX_TEXTURE_IMAGE_UNITS"),
+      maxTextureSize: renderer.capabilities?.maxTextureSize ?? null,
+      maxTextureUnits: renderer.capabilities?.maxTextures ?? null,
       maxAnisotropy: renderer.capabilities?.getMaxAnisotropy?.() ?? null,
-      drawCalls: renderer.info?.render?.calls ?? null,
+      drawCalls: renderer.info?.render?.drawCalls ?? renderer.info?.render?.calls ?? null,
       triangles: renderer.info?.render?.triangles ?? null,
       geometries: renderer.info?.memory?.geometries ?? null,
       textures: renderer.info?.memory?.textures ?? null,
-      shadowsEnabled: renderer.shadowMap?.enabled ?? null
+      shadowsEnabled: renderer.shadowMap?.enabled ?? null,
+      shadowQuality: shadowConfig.quality,
+      shadowMapSize: shadowConfig.mapSize,
+      shadowCascades: shadowConfig.cascades
     };
+  }
+
+  getShadowQuality(): ShadowQuality {
+    return readShadowQuality();
+  }
+
+  setShadowQuality(quality: string): ShadowQualityConfig {
+    const next = normalizeShadowQuality(quality);
+    readStorage()?.setItem("v22ShadowQuality", next);
+    return this.getShadowConfig();
+  }
+
+  getShadowConfig(): ShadowQualityConfig {
+    return shadowQualityConfig(readShadowQuality());
   }
 
   private readRenderer(): LegacyRenderer | null {
@@ -102,23 +146,44 @@ function readDevicePixelRatio(): number {
 }
 
 function readPixelRatioCap(): number {
-  const storage = (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage;
+  const storage = readStorage();
   const value = Number(storage?.getItem("v22PixelRatioCap") ?? 1);
   return Number.isFinite(value) ? Math.max(0.5, Math.min(1, value)) : 1;
 }
 
-function readWebGl2(renderer: LegacyRenderer): boolean | null {
-  const context = renderer.getContext?.();
-  if (!context || typeof context !== "object") return null;
-  return typeof WebGL2RenderingContext !== "undefined" && context instanceof WebGL2RenderingContext;
+function readStorage(): Storage | undefined {
+  return (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage;
 }
 
-function readGlNumber(renderer: LegacyRenderer, name: "MAX_TEXTURE_SIZE" | "MAX_TEXTURE_IMAGE_UNITS"): number | null {
-  const context = renderer.getContext?.();
-  if (!context || typeof context !== "object") return null;
-  const gl = context as WebGLRenderingContext | WebGL2RenderingContext;
-  const enumValue = gl[name];
-  if (typeof enumValue !== "number") return null;
-  const value = gl.getParameter(enumValue);
-  return typeof value === "number" ? value : null;
+function readShadowQuality(): ShadowQuality {
+  return normalizeShadowQuality(readStorage()?.getItem("v22ShadowQuality"));
+}
+
+function normalizeShadowQuality(value: unknown): ShadowQuality {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized === "low" || normalized === "medium" || normalized === "high" || normalized === "ultra") return normalized;
+  return "medium";
+}
+
+function shadowQualityConfig(quality: ShadowQuality): ShadowQualityConfig {
+  switch (quality) {
+    case "low":
+      return { quality, mapSize: 1024, cascades: 3, maxFar: 360, lightMargin: 160, fade: true };
+    case "high":
+      return { quality, mapSize: 3072, cascades: 4, maxFar: 650, lightMargin: 220, fade: true };
+    case "ultra":
+      return { quality, mapSize: 4096, cascades: 4, maxFar: 850, lightMargin: 260, fade: true };
+    case "medium":
+    default:
+      return { quality: "medium", mapSize: 2048, cascades: 4, maxFar: 500, lightMargin: 200, fade: true };
+  }
+}
+
+function readRendererBackend(renderer: LegacyRenderer): string {
+  if (renderer.userData?.v22Backend) return renderer.userData.v22Backend;
+  if (renderer.isWebGPURenderer) {
+    if (renderer.backend?.isWebGPUBackend === true) return "webgpu";
+    return "unsupported-webgpu-fallback";
+  }
+  return "unsupported";
 }

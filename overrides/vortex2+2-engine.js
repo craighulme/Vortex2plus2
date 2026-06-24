@@ -1,16 +1,22 @@
 //Made by inuk, for https://github.com/inuk84/Vortex-2-plus-2
 console.log('VORTEX ENGINE OVERRIDDEN!')
 
-import * as THRE from "./libs/three.module.js";
+import * as THRE from "./libs/three.webgpu.js";
 import * as BufferGeometryUtils from "./libs/BufferGeometryUtils.js";
 import { FBXLoader } from "./libs/FBXLoader.js";
 import { GLTFLoader } from "./libs/GLTFLoader.js";
+import { ShadowService } from "./ShadowService.js";
+
+const VortexBufferGeometryUtils = {
+    ...BufferGeometryUtils,
+    mergeBufferGeometries: BufferGeometryUtils.mergeBufferGeometries || BufferGeometryUtils.mergeGeometries,
+};
 
 const THREE = {
     ...THRE,
     FBXLoader: FBXLoader,
     GLTFLoader: GLTFLoader,
-    BufferGeometryUtils: BufferGeometryUtils,
+    BufferGeometryUtils: VortexBufferGeometryUtils,
 };
 
 const _loadingScreen = document.createElement("div");
@@ -67,15 +73,51 @@ function readStorageNumber(key, fallback, min = -Infinity, max = Infinity) {
 }
 
 let enableShadows = readStorageFlag('enableShadows', false);
-const renderer = new THREE.WebGLRenderer({
-    antialias: readStorageFlag('v22Antialias', false),
-    powerPreference: "high-performance",
-});
+function readGraphicsApiPreference() {
+    return 'webgpu';
+}
+
+function detectRendererBackend(renderer) {
+    if (renderer?.isWebGPURenderer) {
+        if (renderer.backend?.isWebGPUBackend === true) return 'webgpu';
+        return 'unsupported-webgpu-fallback';
+    }
+    return 'unsupported';
+}
+
+async function createVortexRenderer() {
+    const options = {
+        antialias: readStorageFlag('v22Antialias', false),
+        powerPreference: "high-performance",
+    };
+
+    if (!THREE.WebGPURenderer) {
+        throw new Error('WebGPU renderer is unavailable in this build.');
+    }
+
+    const webgpuRenderer = new THREE.WebGPURenderer(options);
+    await webgpuRenderer.init();
+    const backend = detectRendererBackend(webgpuRenderer);
+    if (backend !== 'webgpu') {
+        throw new Error(`WebGPU backend is unavailable (${backend}).`);
+    }
+    webgpuRenderer.userData = webgpuRenderer.userData || {};
+    webgpuRenderer.userData.v22Backend = backend;
+    return webgpuRenderer;
+}
+
+const renderer = await createVortexRenderer();
+const rendererBackend = renderer.userData?.v22Backend || detectRendererBackend(renderer);
+window.__VORTEX_RENDERER_BACKEND = rendererBackend;
+const isWebGpuRuntime = rendererBackend === 'webgpu';
 renderer.setClearColor(0x87CEEB);
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = enableShadows;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+if (renderer.shadowMap) {
+    renderer.shadowMap.enabled = enableShadows;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+}
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, readStorageNumber('v22PixelRatioCap', 1, 0.5, 1)));
+console.info('[renderer] backend', rendererBackend);
 document.getElementById("scene").appendChild(renderer.domElement);
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -115,64 +157,64 @@ function setToneMappingMode(mode) {
     return toneMappingMode;
 }
 
+localStorage.removeItem('v22ShadowTechnique');
+const runtimeRendererService = window.VortexRuntime?.renderer;
+const shadowConfig = runtimeRendererService?.getShadowConfig?.() || {
+    quality: 'medium',
+    mapSize: readStorageNumber('v22ShadowMapSize', 2048, 256, 4096),
+    cascades: 4,
+    maxFar: 500,
+    lightMargin: 200,
+    fade: true,
+};
+localStorage.setItem('v22ShadowQuality', shadowConfig.quality || 'medium');
+const shadowMapSize = shadowConfig.mapSize;
 const ambient = new THREE.AmbientLight(0xffffff, 0.45);
 scene.add(ambient);
-
-const sun = new THREE.DirectionalLight(0xffffff, 3);
-sun.castShadow = enableShadows;
-const shadowMapSize = readStorageNumber('v22ShadowMapSize', 1024, 256, 4096);
-sun.shadow.mapSize.width = shadowMapSize;
-sun.shadow.mapSize.height = shadowMapSize;
-sun.shadow.camera.near = 0.1;
-const s = 350;
-sun.shadow.camera.far = 2 * s;
-sun.shadow.camera.left = -s;
-sun.shadow.camera.right = s;
-sun.shadow.camera.top = s;
-sun.shadow.camera.bottom = -s;
-sun.shadow.autoUpdate = enableShadows;
-sun.shadow.bias = -0.000002;
-scene.add(sun);
-const sunTarget = new THREE.Object3D();
-sunTarget.position.set(0, 0, 0);
-scene.add(sunTarget);
-sun.target = sunTarget;
-const backLight = new THREE.DirectionalLight(0xffffff, 0.4);
-backLight.position.set(-160, 500, -160);
-backLight.castShadow = false;
+const shadows = new ShadowService({
+    THREE,
+    scene,
+    camera,
+    renderer,
+    backend: renderer.userData?.v22Backend || detectRendererBackend(renderer),
+    enabled: enableShadows,
+    shadowConfig,
+});
+const sun = shadows.sun;
+const sunTarget = shadows.sunTarget;
+const backLight = shadows.backLight;
 window.backLight = backLight;
-scene.add(backLight);
+window.VortexShadowService = shadows;
+enableShadows = shadows.enabled;
+localStorage.setItem('enableShadows', enableShadows ? 'yes' : 'no');
 
 function shadowsActive() {
-    return !!enableShadows && !!renderer.shadowMap.enabled;
+    return shadows.active();
 }
 
 function syncSceneShadowFlags(root = scene) {
-    const active = shadowsActive();
-    root.traverse?.((obj) => {
-        if (!obj.isMesh) return;
-        obj.castShadow = active;
-        obj.receiveShadow = active;
-    });
+    shadows.syncObjectShadowFlags(root);
 }
 
 function setShadowsEnabled(value) {
-    enableShadows = !!value;
-    sun.castShadow = enableShadows;
-    sun.shadow.autoUpdate = enableShadows;
-    renderer.shadowMap.enabled = enableShadows;
-    renderer.shadowMap.needsUpdate = enableShadows;
+    enableShadows = shadows.setEnabled(!!value);
     localStorage.setItem('enableShadows', enableShadows ? 'yes' : 'no');
     syncSceneShadowFlags();
+    markSceneMaterialsForShaderUpdate();
     return enableShadows;
 }
 
+function setShadowQuality(value) {
+    const config = runtimeRendererService?.setShadowQuality?.(value) || runtimeRendererService?.getShadowConfig?.() || shadowConfig;
+    localStorage.setItem('v22ShadowQuality', config.quality || value || 'medium');
+    shadows.reconfigure(config);
+    syncSceneShadowFlags();
+    markSceneMaterialsForShaderUpdate();
+    return shadows.snapshot();
+}
+
 function updateLightingForFrame() {
-    if (!shadowsActive()) return;
-    sun.position.set(camera.position.x + 50, camera.position.y + 100, camera.position.z + 50);
-    sunTarget.position.copy(camera.position);
-    sunTarget.updateMatrixWorld();
-    sun.updateMatrixWorld();
+    shadows.update();
 }
 
 const VortexPerf = window.VortexPerf || {};
@@ -273,12 +315,14 @@ Object.assign(VortexPerf, {
                 longFramesOver34ms: this.rafLongFrames
             },
             renderer: {
-                calls: info.render.calls,
-                triangles: info.render.triangles,
-                points: info.render.points,
-                lines: info.render.lines,
-                geometries: info.memory.geometries,
-                textures: info.memory.textures,
+                backend: renderer.userData?.v22Backend || detectRendererBackend(renderer),
+                calls: info.render?.drawCalls ?? info.render?.calls ?? 0,
+                renderCalls: info.render?.frameCalls ?? info.render?.calls ?? 0,
+                triangles: info.render?.triangles ?? 0,
+                points: info.render?.points ?? 0,
+                lines: info.render?.lines ?? 0,
+                geometries: info.memory?.geometries ?? 0,
+                textures: info.memory?.textures ?? 0,
                 programs: info.programs?.length ?? 0
             },
             quality: window.VortexQuality?.get?.() || null
@@ -314,7 +358,14 @@ const maxTextureAnisotropy = Math.min(4, renderer.capabilities?.getMaxAnisotropy
 function cachedTexture(kind, url, rx, ry) {
     const key = `${kind}|${url}|${Number(rx).toFixed(4)}|${Number(ry).toFixed(4)}`;
     if (texCache.has(key)) return texCache.get(key);
-    const texture = tlLoader.load(url);
+    const texture = tlLoader.load(url, () => {
+        texture.needsUpdate = true;
+        markSceneMaterialsForShaderUpdate();
+        shadows.markNeedsUpdate();
+    }, undefined, (error) => {
+        console.warn('[texture] failed to load', { kind, url, error });
+        markSceneMaterialsForShaderUpdate();
+    });
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(rx, ry);
     texture.anisotropy = maxTextureAnisotropy;
@@ -518,6 +569,19 @@ function makeCornerWedge(width, height, depth) {
 const geoCache = new Map();
 const matCache = new Map();
 
+function createStudMaterial(rx, ry, color, transparency = 0) {
+    return new THREE.MeshStandardMaterial({
+        color: color,
+        map: studTex(rx, ry),
+        normalMap: studNormalTex(rx, ry),
+        transparent: transparency > 0,
+        opacity: 1 - transparency,
+        fog: true,
+        roughness: 0.46,
+        metalness: 0,
+    });
+}
+
 function getCachedGeo(sw, sh, sd, shape = "Block") {
     if (shape == "Block") {
         const key = `${shape},${sw},${sh},${sd}`;
@@ -555,7 +619,7 @@ function getCachedMats(sw, sh, sd, color, shape = "Block", transparency = 0) {
     if (shape == "Block" || shape == "Wedge" || shape == "CornerWedge" || shape == "Cylinder" || shape == "Cylinder2") {
         const key = `c${color}t${transparency}`;
         if (matCache.has(key)) return matCache.get(key);
-        const m = (rx, ry) => new THREE.MeshPhongMaterial({ color: color, map: studTex(rx, ry), normalMap: studNormalTex(rx, ry), shininess: 80, transparent: transparency > 0, opacity: 1 - transparency, fog: true });
+        const m = (rx, ry) => createStudMaterial(rx, ry, color, transparency);
         if (transparency > 0.7) m.castShadow = false;
         const mats = m(1 / STUDS_PER_TILE, 1 / STUDS_PER_TILE);
         matCache.set(key, mats);
@@ -564,7 +628,7 @@ function getCachedMats(sw, sh, sd, color, shape = "Block", transparency = 0) {
         const radi = Math.min(sw, sh, sd);
         const key = `s${shape},r${radi},c${color}t${transparency}`;
         if (matCache.has(key)) return matCache.get(key);
-        const m = (rx, ry) => new THREE.MeshPhongMaterial({ color: color, map: studTex(rx, ry), normalMap: studNormalTex(rx, ry), shininess: 80, transparent: transparency > 0, opacity: 1 - transparency, fog: true });
+        const m = (rx, ry) => createStudMaterial(rx, ry, color, transparency);
         if (transparency > 0.7) m.castShadow = false;
         const mats = m(radi / STUDS_PER_TILE, radi / STUDS_PER_TILE);
         matCache.set(key, mats);
@@ -585,6 +649,10 @@ function addStud(sw, sh, sd, color, x, y, z, rx = 0, ry = 0, rz = 0, shape = "Bl
         getCachedGeo(sw, sh, sd, shape),
         getCachedMats(sw, sh, sd, color, shape, transparency)
     );
+    const largeFlatGround = shape === "Block" && sh <= 4 && Math.max(sw, sd) >= 128;
+    if (largeFlatGround) {
+        mesh.userData.v22DisableCastShadow = true;
+    }
     const cy = y + sh / 2;
     mesh.rotation.order = rotationOrder || 'YXZ';
     if (shape == "Cylinder") {
@@ -602,8 +670,8 @@ function addStud(sw, sh, sd, color, x, y, z, rx = 0, ry = 0, rz = 0, shape = "Bl
         mesh.position.set(x, cy, z);
         mesh.rotation.set(rx, ry, rz);
     }
-    mesh.castShadow = shadowsActive();
-    mesh.receiveShadow = shadowsActive();
+    mesh.castShadow = shadowsActive() && !mesh.userData.v22DisableCastShadow;
+    mesh.receiveShadow = shadowsActive() && !mesh.userData.v22DisableReceiveShadow;
     mesh.matrixAutoUpdate = false;
     mesh.frustumCulled = true;
     mesh.updateMatrix();
@@ -1197,16 +1265,16 @@ function _prepareCharacterModel(model) {
     window.character = character;
     if (_avatarRenderer === "modern") {
         _prepareModernAvatarMaterials(model);
-        _shirtMesh = null;
-        _pantsMesh = null;
-        _faceMesh = null;
+        _shirtMesh = isWebGpuRuntime ? _buildShirtOverlay(model) : null;
+        _pantsMesh = isWebGpuRuntime ? _buildPantsOverlay(model) : null;
+        _faceMesh = isWebGpuRuntime ? _buildFaceOverlay(model) : null;
     } else {
         _shirtMesh = _buildShirtOverlay(model);
         _pantsMesh = null;
         _faceMesh = null;
     }
     _applyAvatar(_avatarState).catch((err) => console.warn("[avatar] apply failed", err));
-    if (shadowsActive()) renderer.shadowMap.needsUpdate = true;
+    shadows.markNeedsUpdate();
     window.dispatchEvent(new CustomEvent("v22-character-renderer-changed", { detail: { renderer: _avatarRenderer } }));
 }
 
@@ -1254,7 +1322,13 @@ async function _applyAvatar(avatar = {}) {
             _avatarClothingUrl(_avatarState.pant_id).catch(() => null),
             _avatarClothingUrl(_avatarState.face_id).catch(() => null),
         ]);
-        _applyModernAvatarTextures(character, { shirtUrl, pantsUrl, faceUrl });
+        if (isWebGpuRuntime) {
+            _applyShirtToMesh(_shirtMesh, shirtUrl);
+            _applyShirtToMesh(_pantsMesh, pantsUrl);
+            _applyShirtToMesh(_faceMesh, faceUrl);
+        } else {
+            _applyModernAvatarTextures(character, { shirtUrl, pantsUrl, faceUrl });
+        }
     } else {
         const shirtUrl = await _avatarClothingUrl(_avatarState.shirt_id).catch(() => null);
         _applyShirtToMesh(_shirtMesh, shirtUrl);
@@ -1652,6 +1726,8 @@ function refreshSettingsStatus() {
         ['Health', `${Math.round(health * 100)}%`],
         ['Position', pos ? `${Math.round(pos.x)}, ${Math.round(pos.y)}, ${Math.round(pos.z)}` : '-'],
         ['Avatar', _avatarRenderer === 'modern' ? 'Modern' : 'Legacy'],
+        ['Renderer', renderer.userData?.v22Backend || detectRendererBackend(renderer)],
+        ['Shadows', shadows.snapshot().technique],
         ['Graphics', quality?.shadows ? 'Visual' : 'Performance'],
     ];
     settingsStatus.innerHTML = values.map(([label, value]) => `
@@ -1694,11 +1770,14 @@ toggleShadowsleftText.innerText = 'Dynamic shadows'
 let toggleShadowsCheckBox = document.createElement('input');
 toggleShadowsCheckBox.type = "checkbox";
 toggleShadowsCheckBox.className = 'vw-toggle';
-if (enableShadows) {
-    toggleShadowsCheckBox.click();
+toggleShadowsCheckBox.checked = enableShadows;
+const shadowDisabledReason = shadows.snapshot().disabledReason;
+if (shadowDisabledReason) {
+    toggleShadowsCheckBox.disabled = true;
+    toggleShadowsleftText.innerText = 'Dynamic shadows (disabled for WebGPU)';
 }
 toggleShadowsCheckBox.onchange = function () {
-    setShadowsEnabled(toggleShadowsCheckBox.checked);
+    toggleShadowsCheckBox.checked = setShadowsEnabled(toggleShadowsCheckBox.checked);
 }
 toggleShadows.appendChild(toggleShadowsleftText);
 toggleShadows.appendChild(toggleShadowsCheckBox);
@@ -2033,6 +2112,24 @@ makeButtonRow([
     { label: 'Performance preset', primary: true, onclick: () => { window.VortexQuality?.performance?.(); showReloadNotice(); refreshSettingsStatus(); } },
     { label: 'Visual preset', onclick: () => { window.VortexQuality?.visual?.(); showReloadNotice(); refreshSettingsStatus(); } },
 ], settingsTargets.graphics);
+
+makeSelectControl('Shadow quality', runtimeRendererService?.getShadowQuality?.() || shadowConfig.quality || 'medium', [
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+    { value: 'ultra', label: 'Ultra' },
+], (value) => {
+    setShadowQuality(value);
+    refreshSettingsStatus();
+}, settingsTargets.graphics).title = 'Applies immediately. Higher quality uses larger cascaded shadow maps.';
+
+const graphicsApiSelect = makeSelectControl('Graphics API', readGraphicsApiPreference(), [
+    { value: 'webgpu', label: 'WebGPU' },
+], (value) => {
+    localStorage.setItem('v22RendererBackend', 'webgpu');
+}, settingsTargets.advanced);
+graphicsApiSelect.disabled = true;
+graphicsApiSelect.title = 'Vortex Web targets WebGPU only.';
 
 makeSelectControl('Avatar renderer', _avatarRenderer, [
     { value: 'modern', label: 'Modern GLB' },
@@ -3486,25 +3583,25 @@ window._vortex = {
         _applyShirtToMesh(mesh, url);
     },
     buildShirtOverlay(target) {
-        if (_avatarRenderer === "modern") {
+        if (_avatarRenderer === "modern" && !isWebGpuRuntime) {
             _prepareModernAvatarMaterials(target);
             return null;
         }
         return _buildShirtOverlay(target);
     },
     buildPantsOverlay(target) {
-        if (_avatarRenderer === "modern") {
+        if (_avatarRenderer === "modern" && !isWebGpuRuntime) {
             _prepareModernAvatarMaterials(target);
             return null;
         }
-        return null;
+        return _buildPantsOverlay(target);
     },
     buildFaceOverlay(target) {
-        if (_avatarRenderer === "modern") {
+        if (_avatarRenderer === "modern" && !isWebGpuRuntime) {
             _prepareModernAvatarMaterials(target);
             return null;
         }
-        return null;
+        return _buildFaceOverlay(target);
     },
     applyBodyColors(target, colors) {
         _applyBodyColors(target, colors);
@@ -3529,7 +3626,13 @@ window._vortex = {
                 _avatarClothingUrl(normalized.pant_id).catch(() => null),
                 _avatarClothingUrl(normalized.face_id).catch(() => null),
             ]);
-            _applyModernAvatarTextures(meshes.grp, { shirtUrl, pantsUrl, faceUrl });
+            if (isWebGpuRuntime) {
+                _applyShirtToMesh(meshes.shirtMesh, shirtUrl);
+                _applyShirtToMesh(meshes.pantsMesh, pantsUrl);
+                _applyShirtToMesh(meshes.faceMesh, faceUrl);
+            } else {
+                _applyModernAvatarTextures(meshes.grp, { shirtUrl, pantsUrl, faceUrl });
+            }
         } else {
             const shirtUrl = await _avatarClothingUrl(normalized.shirt_id).catch(() => null);
             _applyShirtToMesh(meshes.shirtMesh, shirtUrl);
@@ -3554,8 +3657,12 @@ window.VortexQuality = {
             shadows: shadowsActive(),
             antialias: readStorageFlag('v22Antialias', false),
             pixelRatio: renderer.getPixelRatio(),
+            rendererBackend: renderer.userData?.v22Backend || detectRendererBackend(renderer),
+            rendererBackendPreference: readGraphicsApiPreference(),
             toneMapping: toneMappingMode,
+            shadowQuality: runtimeRendererService?.getShadowQuality?.() || shadowConfig.quality,
             shadowMapSize,
+            shadowService: shadows.snapshot(),
             avatarRenderer: _avatarRenderer,
             perfProfiler: !!VortexPerf.enabled,
             runtimeBooted: !!window.VortexRuntime,
@@ -3572,6 +3679,14 @@ window.VortexQuality = {
     setShadows(value) {
         return setShadowsEnabled(value);
     },
+    setShadowQuality(value) {
+        return setShadowQuality(value);
+    },
+    recoverMaterials() {
+        markSceneMaterialsForShaderUpdate();
+        shadows.markNeedsUpdate();
+        return this.get();
+    },
     setAvatarRenderer(mode) {
         return _setAvatarRenderer(mode);
     },
@@ -3581,12 +3696,14 @@ window.VortexQuality = {
     performance() {
         setShadowsEnabled(false);
         localStorage.setItem('v22Antialias', '0');
+        setShadowQuality('low');
         setToneMappingMode('none');
         return this.get();
     },
     visual() {
         setShadowsEnabled(true);
         localStorage.setItem('v22Antialias', '1');
+        setShadowQuality('medium');
         setToneMappingMode('agx');
         return this.get();
     },

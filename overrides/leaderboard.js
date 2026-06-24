@@ -105,6 +105,24 @@
     return cosmetics.records?.[playerId] || cosmetics.records?.[String(playerId)] || null;
   }
 
+  function cleanPlayerName(id, value, previous = "") {
+    const raw = String(value || "").trim();
+    const fallback = previous || `#${id}`;
+    if (!raw) return fallback;
+    const lower = raw.toLowerCase();
+    const idText = String(id);
+    if (
+      raw === idText ||
+      raw === `#${idText}` ||
+      lower === `user${idText}` ||
+      lower === `#user${idText}` ||
+      lower === "browserplayer"
+    ) {
+      return fallback;
+    }
+    return raw;
+  }
+
   function selectedVwBadge(record) {
     return record?.badges?.find((badge) => badge.selected) || null;
   }
@@ -522,9 +540,16 @@
 
     addPlayer(player) {
       const idx = players.findIndex((p) => p.id === player.id);
+      const previous = idx >= 0 ? players[idx] : null;
+      const merged = {
+        ...(previous || {}),
+        ...(player || {}),
+        id: player.id,
+        username: cleanPlayerName(player.id, player.username, previous?.username)
+      };
 
-      if (idx >= 0) players[idx] = player;
-      else players.push(player);
+      if (idx >= 0) players[idx] = merged;
+      else players.push(merged);
 
       renderLeaderboard();
     },

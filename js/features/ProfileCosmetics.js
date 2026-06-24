@@ -6,7 +6,7 @@
   }
   if (globalThis.__VortexProfileCosmeticsStarted) return;
   globalThis.__VortexProfileCosmeticsStarted = true;
-    document.documentElement.dataset.vwProfileScript = "20260624-stable-actions";
+  document.documentElement.dataset.vwProfileScript = "20260624-stable-actions";
 
   const PROFILE_RE = /\/users\/(\d+)\/profile\/?$/;
   const EFFECT_CLASSES = [
@@ -531,7 +531,7 @@
     const clearAuthButton = form.querySelector("[data-vw-clear-profile-auth]");
     api.hasProfileAuth?.(userId).then((hasAuth) => {
       if (clearAuthButton) clearAuthButton.hidden = !hasAuth;
-    }).catch(() => {});
+    }).catch(() => { });
     clearAuthButton?.addEventListener("click", async () => {
       await api.unlinkProfileAuth?.(userId);
       clearAuthButton.hidden = true;
@@ -594,9 +594,8 @@
   }
 
   function chooseGradient(presetId, presetGradient, customGradient) {
-    if (presetId === "none") return [];
+    if (presetId === "none") return customGradient.length === 2 ? customGradient : [];
     if (Array.isArray(presetGradient?.colors)) return presetGradient.colors;
-    return customGradient.length === 2 ? customGradient : [];
   }
 
   function selectedGradientPreset(record, gradients) {
@@ -698,9 +697,9 @@
     video.setAttribute("aria-hidden", "true");
     video.setAttribute("playsinline", "");
     video.addEventListener("loadeddata", () => {
-      video.play().catch(() => {});
+      video.play().catch(() => { });
     }, { once: true });
-    window.setTimeout(() => video.play().catch(() => {}), 0);
+    window.setTimeout(() => video.play().catch(() => { }), 0);
     return video;
   }
 
@@ -714,7 +713,7 @@
       cachedTone.then((tone) => {
         if (!tone || header.dataset.vwNameplateUrl !== url) return;
         setNameplateTone(header, tone);
-      }).catch(() => {});
+      }).catch(() => { });
       return;
     }
     const tonePromise = estimateMediaTone(url, media)

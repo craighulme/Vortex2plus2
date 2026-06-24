@@ -90,10 +90,7 @@ function _boostFaceTexture(texture) {
         continue;
       }
 
-      data.data[i] = Math.min(255, Math.round(data.data[i] * 1.6 + 20));
-      data.data[i + 1] = Math.min(255, Math.round(data.data[i + 1] * 1.25));
-      data.data[i + 2] = Math.min(255, Math.round(data.data[i + 2] * 1.25));
-      data.data[i + 3] = Math.min(255, Math.max(190, alpha * 3));
+      data.data[i + 3] = Math.min(255, Math.max(alpha, 220));
     }
     ctx.putImageData(data, 0, 0);
 
@@ -210,6 +207,33 @@ function _bodyPartIndexForMaterial(material, fallbackIndex = 0) {
   return [0, 2, 4, 3, 5, 1][fallbackIndex] ?? 0;
 }
 
+function _isWebGpuRuntime() {
+  return window.__VORTEX_RENDERER_BACKEND === "webgpu" || window.renderer?.isWebGPURenderer === true;
+}
+
+function _makeWebGpuSafeAvatarMaterial(source) {
+  const color = source?.color?.clone?.() || new THREE.Color(0xffffff);
+  const material = new THREE.MeshStandardMaterial({
+    name: source?.name || "",
+    color,
+    roughness: 0.68,
+    metalness: 0,
+    transparent: false,
+    opacity: 1,
+    fog: true
+  });
+  material.userData.v22WebGpuSafe = true;
+  return material;
+}
+
+function _replaceAvatarMaterial(node, index, material) {
+  if (Array.isArray(node.material)) {
+    node.material[index] = material;
+  } else {
+    node.material = material;
+  }
+}
+
 function _setBodyMaterialColor(material, color) {
   if (!material) return;
 
@@ -223,30 +247,6 @@ function _setBodyMaterialColor(material, color) {
 const _MODERN_SHIRT_MATS = new Set(["Material.001", "Material.003", "Material.004", "Material.005"]);
 const _MODERN_PANT_MATS = new Set(["Material.007", "Material.008"]);
 const _MODERN_HEAD_MAT = "Material.002";
-
-function _catalogBlendShader(shader) {
-  shader.fragmentShader = shader.fragmentShader.replace(
-    "#include <map_fragment>",
-    `#ifdef USE_MAP
-      vec4 sampledDiffuseColor = texture2D(map, vMapUv);
-      diffuseColor.rgb = mix(diffuseColor.rgb, sampledDiffuseColor.rgb, sampledDiffuseColor.a);
-      diffuseColor.a = 1.0;
-    #endif`
-  );
-}
-
-function _catalogHeadBlendShader(shader) {
-  shader.fragmentShader = shader.fragmentShader.replace("#include <color_fragment>", "");
-  shader.fragmentShader = shader.fragmentShader.replace(
-    "#include <map_fragment>",
-    `#ifdef USE_MAP
-      vec4 sampledDiffuseColor = texture2D(map, vMapUv);
-      float front = vColor.r;
-      diffuseColor.rgb = mix(diffuseColor.rgb, sampledDiffuseColor.rgb, sampledDiffuseColor.a * front);
-      diffuseColor.a = 1.0;
-    #endif`
-  );
-}
 
 function _cloneMaterialForAvatar(mesh) {
   if (!mesh?.material || mesh.userData.v22CatalogMaterialsCloned) return;
@@ -267,6 +267,7 @@ function _prepareModernAvatarMaterials(characterModel) {
     return characterModel.userData.v22ModernAvatarMaterials;
   }
 
+  const webGpuRuntime = _isWebGpuRuntime();
   const materials = {
     shirtMaterials: [],
     pantMaterials: [],
@@ -281,8 +282,16 @@ function _prepareModernAvatarMaterials(characterModel) {
     _cloneMaterialForAvatar(node);
 
     const nodeMaterials = Array.isArray(node.material) ? node.material : [node.material];
-    for (const material of nodeMaterials) {
+    for (let i = 0; i < nodeMaterials.length; i += 1) {
+      let material = nodeMaterials[i];
       if (!material || seen.has(material.uuid)) continue;
+
+      if (webGpuRuntime && !material.userData?.v22WebGpuSafe) {
+        material = _makeWebGpuSafeAvatarMaterial(material);
+        _replaceAvatarMaterial(node, i, material);
+        nodeMaterials[i] = material;
+      }
+
       seen.add(material.uuid);
 
       const materialName = String(material.name || "");
@@ -294,21 +303,14 @@ function _prepareModernAvatarMaterials(characterModel) {
       if (_MODERN_SHIRT_MATS.has(materialName)) {
         material.vertexColors = false;
         material.transparent = false;
-        material.onBeforeCompile = _catalogBlendShader;
-        material.customProgramCacheKey = () => "v22_catalog_clothing_blend";
         materials.shirtMaterials.push(material);
       } else if (_MODERN_PANT_MATS.has(materialName)) {
         material.vertexColors = false;
         material.transparent = false;
-        material.onBeforeCompile = _catalogBlendShader;
-        material.customProgramCacheKey = () => "v22_catalog_clothing_blend";
         materials.pantMaterials.push(material);
       } else if (materialName === _MODERN_HEAD_MAT) {
-        material.vertexColors = true;
+        material.vertexColors = false;
         material.transparent = false;
-        material.onBeforeCompile = _catalogHeadBlendShader;
-        material.customProgramCacheKey = () => "v22_catalog_head_blend";
-        material.userData.v22KeepVertexColors = true;
         materials.headMaterials.push(material);
       } else {
         material.vertexColors = false;
@@ -359,6 +361,7 @@ function _setModernTexture(materials, textureUrl, kind) {
 }
 
 function _applyModernAvatarTextures(characterModel, urls = {}) {
+  if (_isWebGpuRuntime()) return;
   const materials = _prepareModernAvatarMaterials(characterModel);
   _setModernTexture(materials, urls.shirtUrl, "shirt");
   _setModernTexture(materials, urls.pantsUrl, "pants");
@@ -710,13 +713,15 @@ function _buildClothingOverlayForMesh(bodyMesh, kind, wantedBones, torso, leftLi
 
   const overlayMesh = new THREE.SkinnedMesh(
     overlayGeometry,
-    new THREE.MeshLambertMaterial({
+    new THREE.MeshStandardMaterial({
       transparent: true,
       depthWrite: false,
       alphaTest: 0.01,
       polygonOffset: true,
       polygonOffsetFactor: -1,
-      polygonOffsetUnits: -4
+      polygonOffsetUnits: -4,
+      roughness: 0.7,
+      metalness: 0
     })
   );
 
@@ -753,16 +758,63 @@ function _buildFaceOverlay(characterModel) {
 
   if (!bodyMesh || headBoneIndex < 0) return null;
 
-  const z = -0.592;
+  const position = bodyMesh.geometry.attributes.position;
+  const skinIndex = bodyMesh.geometry.attributes.skinIndex;
+  const skinWeight = bodyMesh.geometry.attributes.skinWeight;
+  const skinIndexArray = skinIndex.array;
+  const skinWeightArray = skinWeight.array;
+  const headBounds = {
+    xMin: Infinity,
+    xMax: -Infinity,
+    yMin: Infinity,
+    yMax: -Infinity,
+    zMin: Infinity,
+    zMax: -Infinity
+  };
+
+  for (let i = 0; i < position.count; i += 1) {
+    let headInfluence = 0;
+    for (let j = 0; j < 4; j += 1) {
+      const offset = i * 4 + j;
+      if (skinIndexArray[offset] === headBoneIndex) {
+        headInfluence += skinWeightArray[offset];
+      }
+    }
+    if (headInfluence < 0.5) continue;
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    headBounds.xMin = Math.min(headBounds.xMin, x);
+    headBounds.xMax = Math.max(headBounds.xMax, x);
+    headBounds.yMin = Math.min(headBounds.yMin, y);
+    headBounds.yMax = Math.max(headBounds.yMax, y);
+    headBounds.zMin = Math.min(headBounds.zMin, z);
+    headBounds.zMax = Math.max(headBounds.zMax, z);
+  }
+
+  if (!Number.isFinite(headBounds.xMin)) return null;
+
+  const headWidth = headBounds.xMax - headBounds.xMin;
+  const headHeight = headBounds.yMax - headBounds.yMin;
+  const faceSize = Math.min(headWidth * 0.72, headHeight * 0.62);
+  const cx = (headBounds.xMin + headBounds.xMax) * 0.5;
+  const cy = headBounds.yMin + headHeight * 0.56;
+  const halfFace = faceSize * 0.5;
+  const x0 = cx - halfFace;
+  const x1 = cx + halfFace;
+  const y0 = cy - halfFace;
+  const y1 = cy + halfFace;
+  const z = headBounds.zMin - Math.max(0.004, (headBounds.zMax - headBounds.zMin) * 0.006);
+
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
     "position",
     new THREE.BufferAttribute(
       new Float32Array([
-        -0.36, 4.42, z,
-         0.36, 4.42, z,
-         0.36, 4.86, z,
-        -0.36, 4.86, z
+        x0, y0, z,
+        x1, y0, z,
+        x1, y1, z,
+        x0, y1, z
       ]),
       3
     )
@@ -823,7 +875,7 @@ function _buildFaceOverlay(characterModel) {
       transparent: true,
       depthTest: true,
       depthWrite: false,
-      side: THREE.FrontSide,
+      side: THREE.DoubleSide,
       alphaTest: 0.08,
       polygonOffset: true,
       polygonOffsetFactor: -0.25,

@@ -46,6 +46,10 @@ input {
     border-color: var(--linecol1) !important;
 }
 
+.site-footer{
+    border-color: var(--linecol1) !important;
+}
+
 /* friends bar */
 .friend-name {
     color: var(--textcol1) !important;
@@ -54,10 +58,12 @@ input {
     color: var(--textcol1) !important;
     background-color: var(--bgcol2) !important;
 }
-
 .section-title,
 .section-link {
     color: var(--textcol2) !important;
+}
+.friend-avatar {
+    color: var(--bgcol1) !important;
 }
 
 /* topbar stuff */
@@ -132,6 +138,11 @@ span:not(.msg-name),
     color: var(--textcol1) !important;
 }
 
+.user-card{
+    background-color: var(--bgcol2) !important;
+    border-color: var(--linecol2) !important;
+}
+
 .profile-stat,
 .bio-text,
 .join-date-value {
@@ -188,7 +199,7 @@ label {
     background-color: var(--bgcol2) !important;
     border-color: var(--linecol1) !important;
 }
-li{
+li, a, h2, h1, .fa-brands{
     color: var(--textcol1) !important;
 }
 .dl-code {
@@ -197,6 +208,20 @@ li{
 .btn-download{
     background-color: var(--accentcol1) !important;
     border: 2px solid var(--linecol2) !important;
+}
+
+/* Catalog page */
+.color-swatch, .catalog-header, .catalog-section-divider{
+    border-color: var(--linecol2) !important;
+}
+.market-card{
+    background: var(--bgcol3) !important;
+}
+.item-name{
+    color: var(--textcol1) !important;
+}
+.catalog-section-divider{
+    color: var(--textcol2) !important;
 }
 
 /* Vortex Web profile cosmetics */
