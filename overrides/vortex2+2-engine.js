@@ -285,6 +285,7 @@ Object.assign(VortexPerf, {
         };
     },
     sample(seconds = 5, options = {}) {
+        const previousEnabled = this.enabled;
         const previousLog = this.log;
         this.enabled = true;
         this.log = !!options.log;
@@ -294,7 +295,10 @@ Object.assign(VortexPerf, {
         return new Promise((resolve) => {
             setTimeout(() => {
                 const report = this.report();
+                this.enabled = previousEnabled;
                 this.log = previousLog;
+                localStorage.setItem('v22Perf', this.enabled ? '1' : '0');
+                if (!this.enabled) this.reset(true);
                 resolve(report);
             }, duration);
         });
@@ -941,6 +945,18 @@ let cursorX = window.innerWidth / 2;
 let cursorY = window.innerHeight / 2;
 
 const anim = { time: 0, bones: {}, rest: {} };
+const footIkState = {
+    leftY: 0,
+    rightY: 0,
+    pelvisY: 0,
+    leftGroundY: null,
+    rightGroundY: null,
+    active: false,
+    axis: 'y',
+    leftScale: 1,
+    rightScale: 1,
+    maxLegExtension: 1.35,
+};
 
 function getBone(...names) {
     for (const n of names) if (anim.bones[n]) return anim.bones[n];
@@ -1118,6 +1134,7 @@ function _registerBone(child) {
     const rest = {
         x: child.rotation.x, y: child.rotation.y, z: child.rotation.z,
         px: child.position.x, py: child.position.y, pz: child.position.z,
+        sx: child.scale.x, sy: child.scale.y, sz: child.scale.z,
     };
     anim.bones[name] = child;
     anim.rest[name] = rest;
@@ -1275,6 +1292,26 @@ if (runtimeInput && typeof runtimeInput.attachTarget === 'function') {
 }
 const keys = runtimeInput && runtimeInput.keys || {};
 let mouseLock = false;
+
+function isLegacyInputActive() {
+    return !!window.locked ||
+        !!document.pointerLockElement && document.pointerLockElement === renderer.domElement ||
+        !!(runtimeInput && typeof runtimeInput.isLocked === 'function' && runtimeInput.isLocked());
+}
+
+document.addEventListener('keydown', e => {
+    if (window._chatFocused) return;
+    if (!isLegacyInputActive()) return;
+    keys[e.code] = true;
+}, true);
+
+document.addEventListener('keyup', e => {
+    keys[e.code] = false;
+}, true);
+
+window.addEventListener('blur', () => {
+    for (const key of Object.keys(keys)) keys[key] = false;
+});
 
 function requestGamePointerLock() {
     if (runtimeInput && typeof runtimeInput.requestPointerLock === 'function') {
@@ -2430,6 +2467,120 @@ function updateAnimations(dt, moving) {
     }
 }
 
+function applyRuntimeFootIk(dt, moving) {
+    const service = window.VortexRuntime?.animation;
+    const physics = window.VortexRuntime?.physics;
+    const config = service?.getFootIk?.();
+    const physicsReady = physics?.snapshot?.().status === 'ready';
+    if (!character || !grounded || !config?.enabled || !physicsReady || typeof physics?.castRay !== 'function') {
+        resetFootIk(dt, config?.smoothing || 12);
+        return;
+    }
+
+    const lLeg = anim.bones['Left_Leg'];
+    const rLeg = anim.bones['Right_Leg'];
+    const torso = anim.bones['Torso'];
+    if (!lLeg || !rLeg) return;
+    const axis = footIkVerticalAxis(lLeg, rLeg);
+
+    const maxOffset = Math.max(0, Math.min(2.5, Number(config.maxLegExtension) || 1.35));
+    const probe = Math.max(1, Math.min(8, Number(config.footProbeDistance) || 2.5));
+    const smoothing = Math.max(1, Math.min(30, Number(config.smoothing) || 12));
+    const moveBlend = moving ? 0.35 : 1;
+    const footY = character.position.y - CHAR_FOOT_OFFSET;
+
+    const left = sampleFootGround(lLeg, 0.9, footY, probe, physics, axis);
+    const right = sampleFootGround(rLeg, -0.9, footY, probe, physics, axis);
+    const leftOffset = footIkGroundOffset(left, footY, maxOffset) * moveBlend;
+    const rightOffset = footIkGroundOffset(right, footY, maxOffset) * moveBlend;
+    const anchorOffset = Math.max(0, leftOffset, rightOffset);
+    const leftTarget = THREE.MathUtils.clamp(leftOffset - anchorOffset, -maxOffset, 0);
+    const rightTarget = THREE.MathUtils.clamp(rightOffset - anchorOffset, -maxOffset, 0);
+    const alpha = Math.min(1, smoothing * dt);
+
+    footIkState.leftY = THREE.MathUtils.lerp(footIkState.leftY, leftTarget, alpha);
+    footIkState.rightY = THREE.MathUtils.lerp(footIkState.rightY, rightTarget, alpha);
+    footIkState.pelvisY = THREE.MathUtils.lerp(footIkState.pelvisY, 0, alpha);
+    footIkState.leftGroundY = left.hit ? left.groundY : null;
+    footIkState.rightGroundY = right.hit ? right.groundY : null;
+    footIkState.active = Math.abs(footIkState.leftY) > 0.01 || Math.abs(footIkState.rightY) > 0.01 || Math.abs(footIkState.pelvisY) > 0.01;
+    footIkState.axis = axis;
+    footIkState.maxLegExtension = maxOffset;
+
+    footIkState.leftScale = applyLegVerticalOffset(lLeg, footIkState.leftY, axis);
+    footIkState.rightScale = applyLegVerticalOffset(rLeg, footIkState.rightY, axis);
+    if (torso) applyBoneVerticalOffset(torso, footIkState.pelvisY, axis);
+}
+
+function footIkGroundOffset(sample, footY, maxOffset) {
+    if (!sample.hit) return 0;
+    return THREE.MathUtils.clamp(sample.groundY - footY, -maxOffset, maxOffset);
+}
+
+function resetFootIk(dt, smoothing = 12) {
+    const alpha = Math.min(1, Math.max(1, smoothing) * dt);
+    footIkState.leftY = THREE.MathUtils.lerp(footIkState.leftY, 0, alpha);
+    footIkState.rightY = THREE.MathUtils.lerp(footIkState.rightY, 0, alpha);
+    footIkState.pelvisY = THREE.MathUtils.lerp(footIkState.pelvisY, 0, alpha);
+    footIkState.leftGroundY = null;
+    footIkState.rightGroundY = null;
+    footIkState.active = false;
+    const axis = footIkVerticalAxis(anim.bones['Left_Leg'], anim.bones['Right_Leg']);
+    footIkState.axis = axis;
+    footIkState.leftScale = applyLegVerticalOffset(anim.bones['Left_Leg'], footIkState.leftY, axis);
+    footIkState.rightScale = applyLegVerticalOffset(anim.bones['Right_Leg'], footIkState.rightY, axis);
+    applyBoneVerticalOffset(anim.bones['Torso'], footIkState.pelvisY, axis);
+}
+
+function sampleFootGround(bone, fallbackLocalX, footY, probe, physics, axis) {
+    const rest = anim.rest[bone.name] || {};
+    const localX = Number.isFinite(rest.px) ? THREE.MathUtils.clamp(rest.px, -1.15, 1.15) : fallbackLocalX;
+    const forwardRest = axis === 'z' ? rest.py : rest.pz;
+    const localZ = Number.isFinite(forwardRest) ? THREE.MathUtils.clamp(forwardRest, -1.15, 1.15) : 0;
+    const yaw = character.rotation.y;
+    const worldX = character.position.x + Math.cos(yaw) * localX + Math.sin(yaw) * localZ;
+    const worldZ = character.position.z - Math.sin(yaw) * localX + Math.cos(yaw) * localZ;
+    const hit = physics.castRay([worldX, footY + probe * 0.5, worldZ], [0, -1, 0], probe + 0.5);
+    return {
+        hit: !!hit,
+        groundY: hit?.point?.[1] ?? (footY - probe * 0.5),
+        x: worldX,
+        z: worldZ,
+    };
+}
+
+function footIkVerticalAxis(leftLeg, rightLeg) {
+    const left = leftLeg ? anim.rest[leftLeg.name] : null;
+    const right = rightLeg ? anim.rest[rightLeg.name] : null;
+    const zMagnitude = Math.max(Math.abs(left?.pz || 0), Math.abs(right?.pz || 0));
+    const yMagnitude = Math.max(Math.abs(left?.py || 0), Math.abs(right?.py || 0));
+    return zMagnitude > yMagnitude + 0.25 ? 'z' : 'y';
+}
+
+function applyBoneVerticalOffset(bone, offset, axis) {
+    if (!bone) return;
+    const rest = anim.rest[bone.name] || {};
+    const key = axis === 'z' ? 'pz' : 'py';
+    const restValue = Number.isFinite(rest[key]) ? rest[key] : bone.position[axis];
+    bone.position[axis] = restValue + offset;
+}
+
+function applyLegVerticalOffset(bone, offset, axis) {
+    if (!bone) return 1;
+    const rest = anim.rest[bone.name] || {};
+    const positionKey = axis === 'z' ? 'pz' : 'py';
+    const scaleKey = axis === 'z' ? 'sz' : 'sy';
+    const restPosition = Number.isFinite(rest[positionKey]) ? rest[positionKey] : bone.position[axis];
+    const restScale = Number.isFinite(rest[scaleKey]) ? rest[scaleKey] : 1;
+    const extension = Math.max(0, -offset);
+    const legLength = Math.max(1, Math.min(3, CHAR_HEIGHT * 0.4));
+    const scale = restScale;
+    const slide = THREE.MathUtils.clamp(-extension * 0.28, -legLength * 0.22, 0);
+    bone.position[axis] = restPosition + slide;
+    bone.scale[axis] = scale;
+    return scale;
+}
+
 function obbOverlap(cx, cz, co, si, b) {
     const aco = Math.abs(co), asi = Math.abs(si);
     const bcx = (b.minX + b.maxX) * 0.5, bcz = (b.minZ + b.maxZ) * 0.5;
@@ -3046,6 +3197,7 @@ function update(dt) {
     }
 
     updateAnimations(dt, moving);
+    applyRuntimeFootIk(dt, moving);
 
     if (window.BUILD_MODE) update_Display_Block();
 }
@@ -3289,6 +3441,7 @@ window._vortex = {
     getCharHeight: () => CHAR_HEIGHT,
     getSpawn: () => ({ ..._spawnPoint }),
     getAnimRest: () => anim.rest,
+    getFootIkState: () => ({ ...footIkState }),
     keys,
     setSens(mult) {
         CAM_H_SENS = 0.0015 * Math.PI * mult;

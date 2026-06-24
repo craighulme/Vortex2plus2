@@ -12,5 +12,8 @@
     "typescript": "^5.9.2",
     "vite": "^6.4.3",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3"
   }
 }

@@ -1,4 +1,8 @@
 (function () {
+    if (window.VortexRuntime?.chat?.mount?.()) {
+        return;
+    }
+
     const chatWindow = document.getElementById('chat-window');
     const messagesEl = document.getElementById('chat-messages');
     const inputEl    = document.getElementById('chat-input');

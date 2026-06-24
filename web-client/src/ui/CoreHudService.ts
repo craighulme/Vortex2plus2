@@ -1,4 +1,5 @@
 import type { SlimTarget } from "../optimization/SlimService";
+import type { PhysicsDebugRender } from "../physics/types";
 
 export type CoreHudState = {
   toolbarVisible: boolean;
@@ -8,7 +9,19 @@ export type CoreHudState = {
 
 type RuntimePanelSource = {
   version: string;
-  physics: { backend: string };
+  physics: {
+    backend: string;
+    debugRender?(): PhysicsDebugRender | null;
+    snapshot?(): {
+      backend: string;
+      status: string;
+      colliders: number;
+      pendingColliders: number;
+      lastSyncSource: string;
+      version?: string;
+      error?: string;
+    };
+  };
   renderer: {
     getHandles(): { renderer?: unknown; scene?: unknown; camera?: unknown };
     snapshot?(): {
@@ -45,6 +58,10 @@ type RuntimePanelSource = {
     };
   };
   avatar: { getPreviewState?(): unknown };
+  animation: {
+    getFootIk(): { enabled: boolean; maxPelvisOffset: number; maxLegExtension: number; footProbeDistance: number; smoothing: number };
+    setFootIk(config: Partial<{ enabled: boolean; maxPelvisOffset: number; maxLegExtension: number; footProbeDistance: number; smoothing: number }>): void;
+  };
   sandbox: {
     spawnFootball(source: RuntimePanelSource): boolean;
     spawnStressField(source: RuntimePanelSource, count?: number): boolean;
@@ -80,6 +97,8 @@ export class CoreHudService {
   private lastFpsAt = performance.now();
   private lastPanelRenderAt = 0;
   private fps = 0;
+  private physicsDebugVisible = false;
+  private physicsDebugObject: unknown = null;
 
   constructor(private readonly document: Document) {}
 
@@ -96,6 +115,7 @@ export class CoreHudService {
   setRuntimePanelVisible(visible: boolean): void {
     this.state = { ...this.state, runtimePanelVisible: visible };
     if (this.runtimePanel) this.runtimePanel.hidden = !visible;
+    if (!visible) this.clearPhysicsDebug();
   }
 
   mountRuntimePanel(source: RuntimePanelSource): void {
@@ -114,6 +134,7 @@ export class CoreHudService {
         <button type="button" data-vrp-action="stress">Start Stress</button>
         <button type="button" data-vrp-action="stop">Stop</button>
         <button type="button" data-vrp-action="clear">Clear</button>
+        <button type="button" data-vrp-action="physics-debug">Colliders</button>
       </div>
     `;
     this.runtimePanel = panel;
@@ -123,6 +144,7 @@ export class CoreHudService {
     panel.querySelector("[data-vrp-action='stress']")?.addEventListener("click", () => source.sandbox.startStress(source, 250));
     panel.querySelector("[data-vrp-action='stop']")?.addEventListener("click", () => source.sandbox.stopStress());
     panel.querySelector("[data-vrp-action='clear']")?.addEventListener("click", () => source.sandbox.clear(source));
+    panel.querySelector("[data-vrp-action='physics-debug']")?.addEventListener("click", () => this.togglePhysicsDebug(source));
     this.document.body.appendChild(panel);
     this.setRuntimePanelVisible(this.state.runtimePanelVisible);
 
@@ -151,11 +173,13 @@ export class CoreHudService {
     const input = source.input.snapshot();
     const streaming = source.streaming.snapshot();
     const renderer = source.renderer.snapshot?.();
+    this.updatePhysicsDebug(source);
     this.runtimePanelBody.innerHTML = `
       <div><b>Client</b><span>live web runtime</span></div>
       <div><b>Version</b><span>${escapeHtml(source.version)}</span></div>
       <div><b>Input</b><span>${escapeHtml(formatInput(input))}</span></div>
-      <div><b>Physics</b><span>${escapeHtml(formatPhysics(source.physics.backend))}</span></div>
+      <div><b>Physics</b><span>${escapeHtml(formatPhysics(source.physics))}</span></div>
+      <div><b>Foot IK</b><span>${source.animation.getFootIk().enabled ? "enabled" : "off"}</span></div>
       <div><b>SLIM</b><span>${escapeHtml(formatSlim(slim))}</span></div>
       <div><b>Stream</b><span>${escapeHtml(formatStream(streaming))}</span></div>
       <div><b>Renderer</b><span>${escapeHtml(formatRenderer(renderer, Boolean(rendererHandles.renderer)))}</span></div>
@@ -216,7 +240,7 @@ export class CoreHudService {
       }
       #vortex-runtime-panel .vrp-actions {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 6px;
         padding: 0 10px 10px;
       }
@@ -240,7 +264,73 @@ export class CoreHudService {
     `;
     this.document.documentElement.appendChild(style);
   }
+
+  private togglePhysicsDebug(source: RuntimePanelSource): void {
+    this.physicsDebugVisible = !this.physicsDebugVisible;
+    if (!this.physicsDebugVisible) this.clearPhysicsDebug();
+    this.lastPanelRenderAt = 0;
+    this.updateRuntimePanel(source);
+  }
+
+  private updatePhysicsDebug(source: RuntimePanelSource): void {
+    if (!this.physicsDebugVisible) return;
+    const buffers = source.physics.debugRender?.();
+    const handles = source.renderer.getHandles();
+    const scene = handles.scene as { add?: (object: unknown) => void; remove?: (object: unknown) => void } | undefined;
+    const three = (globalThis as typeof globalThis & { THREE?: ThreeLike }).THREE;
+    if (!buffers || !scene || !three) {
+      this.clearPhysicsDebug(scene);
+      return;
+    }
+
+    const existing = this.physicsDebugObject as DebugObject | null;
+    if (existing) {
+      scene.remove?.(existing);
+      existing.geometry?.dispose?.();
+      existing.material?.dispose?.();
+    }
+
+    const geometry = new three.BufferGeometry();
+    geometry.setAttribute("position", new three.BufferAttribute(buffers.vertices, 3));
+    geometry.setAttribute("color", new three.BufferAttribute(buffers.colors, 4));
+    const material = new three.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.78,
+      depthTest: false,
+      depthWrite: false
+    });
+    const lines = new three.LineSegments(geometry, material);
+    lines.name = "VortexRuntimePhysicsDebug";
+    lines.renderOrder = 9999;
+    scene.add?.(lines);
+    this.physicsDebugObject = lines;
+  }
+
+  private clearPhysicsDebug(scene?: { remove?: (object: unknown) => void }): void {
+    const object = this.physicsDebugObject as DebugObject | null;
+    if (!object) return;
+    const currentScene = scene ?? (object.parent as { remove?: (object: unknown) => void } | undefined);
+    currentScene?.remove?.(object);
+    object.geometry?.dispose?.();
+    object.material?.dispose?.();
+    this.physicsDebugObject = null;
+    this.physicsDebugVisible = false;
+  }
 }
+
+type DebugObject = {
+  parent?: unknown;
+  geometry?: { dispose?: () => void };
+  material?: { dispose?: () => void };
+};
+
+type ThreeLike = {
+  BufferGeometry: new () => { setAttribute(name: string, attribute: unknown): void };
+  BufferAttribute: new (array: Float32Array, itemSize: number) => unknown;
+  LineBasicMaterial: new (options: Record<string, unknown>) => { dispose?: () => void };
+  LineSegments: new (geometry: unknown, material: unknown) => DebugObject & { name?: string; renderOrder?: number };
+};
 
 function callArrayGetter(getter: unknown): unknown[] {
   if (typeof getter !== "function") return [];
@@ -258,9 +348,19 @@ function formatAvatar(value: unknown): string {
   return `shirt ${avatar.shirtId ?? 0}, pants ${avatar.pantId ?? 0}, face ${avatar.faceId ?? 0}`;
 }
 
-function formatPhysics(backend: string): string {
-  if (backend === "legacy-adapter") return "client sandbox + live world";
-  return backend;
+function formatPhysics(physics: RuntimePanelSource["physics"]): string {
+  const snapshot = physics.snapshot?.();
+  if (!snapshot) return physics.backend;
+  if (snapshot.status === "ready") {
+    return `${snapshot.backend} ${snapshot.version ?? ""}, ${snapshot.colliders} colliders`.trim();
+  }
+  if (snapshot.status === "loading") {
+    return `${snapshot.backend} loading, ${snapshot.pendingColliders} queued`;
+  }
+  if (snapshot.status === "error") {
+    return `${snapshot.backend} error: ${snapshot.error ?? "unknown"}`;
+  }
+  return `${snapshot.backend} ${snapshot.status}, ${snapshot.colliders} colliders`;
 }
 
 function formatInput(input: {

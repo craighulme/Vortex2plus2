@@ -223,14 +223,16 @@ function postMessageAndWait(type, payload1, payload2) {
             window.removeEventListener("message", handler);
 
             const payload = event.data.payload;
+            const rawStatus = Number(payload.status);
+            const status = rawStatus >= 200 && rawStatus <= 599 ? rawStatus : 502;
+            const statusText = payload.statusText || (status === 502 ? "Extension request failed" : "");
 
             const res = new Response(payload.body, {
-                status: payload.status,
-                statusText: payload.statusText,
+                status,
+                statusText,
                 headers: new Headers(payload.headers),
-                url: payload.url,
-                type: payload.type,
             });
+            res.vortexOriginalStatus = rawStatus;
             res.json = function(){
                 return payload.bodyJson;
             }
