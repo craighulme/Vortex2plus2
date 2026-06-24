@@ -1,8 +1,8 @@
 # Vortex Web Commands
 
-Vortex Web includes a small set of chat commands and optional advanced tools for licensed users.
+Vortex Web includes a small set of chat commands and browser tools for licensed users.
 
-Most players only need the chat commands. Advanced tools are available for testing, moderation, avatar work, or private development depending on the license features attached to the user.
+Most players only need the chat commands. Extra movement tools are available only when the license attached to the user allows them.
 
 For access or additional command permissions, contact `quackduck.` on Discord.
 
@@ -17,9 +17,7 @@ For access or additional command permissions, contact `quackduck.` on Discord.
 | `noclip-command` | Browser-side collision bypass. |
 | `gravity-command` | Browser-side gravity and fall-speed control. |
 | `airwalk-command` | Browser-side airwalk mode. |
-| `avatar-spoof` | Avatar override tools for authorised testing. |
-| `packet-debug` | Packet inspection tools for authorised testing. |
-| Local/dev only | Private relay, protocol, or engine development tools. |
+| Local/dev only | Private relay, protocol, or engine development tools. These are not documented in the public client repo. |
 
 ## Chat Commands
 
@@ -41,7 +39,7 @@ Type these in Vortex chat. Commands start with `::`.
 
 ## Avatar Tools
 
-These tools are available from browser devtools when Vortex Web is loaded.
+These tools are available from browser devtools when Vortex Web is loaded. They affect the local browser client.
 
 | Tool | Access | Result |
 | --- | --- | --- |
@@ -76,45 +74,21 @@ These mirror the movement chat commands from devtools.
 | `VortexMovement.setGravity(scale)` | `gravity-command` | Sets gravity scale from `0` to `8`, or pass `"reset"`. |
 | `VortexMovement.reset()` | Base license | Disables fly, noclip, airwalk, and custom gravity. |
 
-## Packet And Avatar Testing
-
-These are advanced tools for authorised testing. They are not required for normal play.
-
-| Tool | Access | Result |
-| --- | --- | --- |
-| `VortexPacketDebug.enable(true)` | `packet-debug` | Enables packet debug output. |
-| `VortexPacketDebug.enable(false)` | `packet-debug` | Disables packet debug output. |
-| `VortexPacketDebug.table()` | `packet-debug` | Shows replicated players as a table. |
-| `VortexPacketDebug.players()` | `packet-debug` | Returns replicated player snapshots. |
-| `VortexPacketDebug.history()` | `packet-debug` | Returns recent replicated player batches. |
-| `VortexPacketDebug.setJoinAvatar(patch)` | `avatar-spoof` | Saves an avatar override for future joins. |
-| `VortexPacketDebug.getJoinAvatar()` | Base license | Reads the saved join avatar override. |
-| `VortexPacketDebug.clearJoinAvatar()` | Base license | Clears the saved join avatar override. |
-| `VortexPacketDebug.spoofAvatar(patch)` | `avatar-spoof` | Applies and sends an avatar override using the current movement format. |
-| `VortexPacketDebug.spoofAvatarCompact(patch, options)` | `avatar-spoof` | Sends an avatar override using compact movement encoding. |
-| `VortexPacketDebug.spoofAvatarResync(patch, options)` | `avatar-spoof` | Sends an override, waits, then resyncs movement format. |
-| `VortexPacketDebug.spoofShirt(id)` | `avatar-spoof` | Overrides only the shirt id. |
-| `VortexPacketDebug.spoofOutfit(shirtId, pantId, faceId)` | `avatar-spoof` | Overrides shirt, pants, and face ids. |
-| `VortexPacketDebug.spoofColors(colors)` | `avatar-spoof` | Overrides body colours. |
-| `VortexPacketDebug.clearSpoof()` | `avatar-spoof` when available | Restores the saved original avatar. |
-
-Example:
-
-```js
-VortexPacketDebug.spoofOutfit(12, 8, 3)
-```
-
 ## Runtime Status Tools
 
-The new Vortex Web runtime exposes status helpers for development builds and issue reports.
+The new Vortex Web runtime exposes status helpers for development builds and issue reports. These are diagnostic helpers, not gameplay features.
 
 | Tool | Result |
 | --- | --- |
 | `VortexRuntime.input.snapshot()` | Shows pointer lock, focus, and active key state. |
 | `VortexRuntime.slim.snapshot()` | Shows active SLIM targets and distance bands. |
+| `VortexRuntime.physics.snapshot()` | Shows the active physics backend, Rapier load status, synced collider count, and version. |
+| `VortexRuntime.physics.debugRender()` | Returns Rapier collider line buffers when Rapier is ready. The runtime panel can draw them in-game. |
 | `VortexRuntime.streaming.snapshot()` | Shows queued, ready, and rejected streamed asset manifests. |
 | `VortexRuntime.community.snapshot()` | Shows cached Vortex-Web profile cosmetic state. |
 | `VortexRuntime.world.loadedMaps()` | Shows maps registered through the new world service. |
+| `VortexRuntime.chat.snapshot()` | Shows whether the runtime chat service mounted and whether chat is active. |
+| `VortexRuntime.leaderboard.snapshot()` | Shows whether the runtime leaderboard bridge adopted the active leaderboard. |
 | `VortexRuntimeDevTools.enable()` | Mounts the runtime panel and starts the debug/sandbox/SLIM scheduler for the current page. |
 | `VortexRuntimeDevTools.disable()` | Hides the runtime panel and stops the debug scheduler. |
 
@@ -160,9 +134,23 @@ location.reload()
 
 The runtime shell is passive by default. The runtime panel and sandbox scheduler only run after `VortexRuntimeDevTools.enable()` or when `localStorage.v22RuntimeDevTools` is set to `"1"`.
 
+The current physics backend can be forced before reload:
+
+```js
+localStorage.setItem("v22PhysicsBackend", "rapier")
+location.reload()
+```
+
+Switch back to the legacy physics adapter with:
+
+```js
+localStorage.setItem("v22PhysicsBackend", "legacy")
+location.reload()
+```
+
 ## Notes
 
 - Hosted mode does not require sending your Vortex browser cookies or session token to Vortex Web servers.
 - Hosted mode uses the browser locally to obtain a short-lived Vortex launch authorisation, then the relay verifies it server-side.
-- Local relay mode is for private development and testing.
-- Advanced tools are local browser tools unless stated otherwise. Relay-visible behaviour remains controlled by signed license leases and relay validation.
+- Local relay mode is for private development and testing only.
+- Relay-visible behaviour remains controlled by signed license leases and relay validation.

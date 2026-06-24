@@ -22,7 +22,7 @@ The current public focus is the playable web client. A web studio is not part of
 - Multiplayer chat, player replication, health, swords, and building modes
 - Current map loading and classic bundled maps
 - Avatar clothing support for existing shirt, pants, face, body type, and colour data
-- Command-gated movement and avatar tools for authorised users
+- Command-gated movement tools for authorised users
 - A new TypeScript/Vite web runtime that now boots alongside the live client
 
 ## Runtime Upgrade Progress
@@ -36,6 +36,10 @@ Already in the new web runtime:
 - Input and focus service for pointer lock, key state, shortcut blocking, and game focus
 - Runtime HUD panel with live input, world, FPS, SLIM, streaming, sandbox, and avatar status
 - SLIM-style distance band infrastructure for future mesh and streamed asset optimisation
+- Rapier side-by-side physics backend with static map collider sync and raycast support
+- Rapier collider debug drawing from the runtime panel
+- Chat mounted through the new runtime service, with the old script kept as fallback
+- Leaderboard exposed through a typed runtime bridge while the existing renderer stays compatible
 - Client-only physics sandbox for stress testing, falling parts, and a kickable test ball
 - Early asset streaming manifest validation for future models, meshes, textures, avatar items, map chunks, and script packages
 - World map-part normalisation through the new `WorldService`, currently mirrored through the legacy add/remove backend
@@ -45,9 +49,9 @@ Already in the new web runtime:
 Still being migrated:
 
 - Full map loading and batching
-- Chat and leaderboard UI ownership
-- Rapier side-by-side physics
-- Foot IK
+- Full leaderboard renderer ownership inside `web-client`
+- Rapier-driven dynamic bodies and movement parity testing
+- Foot IK on an IK-friendly avatar rig
 - Character movement replacement
 - Avatar equipment slots for hats, masks, tools, shoes, and held items
 - Production SLIM for real meshes, repeated assets, streamed UGC, and map chunks
@@ -66,7 +70,7 @@ Public builds are designed around the hosted Vortex Web relay. Local relay mode 
 
 Vortex Web browser multiplayer is license-gated while the project is still moving fast. For access, contact `quackduck.` on Discord.
 
-Command access is feature-gated. Some commands are available to all licensed users, while advanced movement, avatar, and packet tools require extra authorisation. See [COMMANDS_README.md](COMMANDS_README.md).
+Command access is feature-gated. Some commands are available to all licensed users, while advanced movement tools require extra authorisation. See [COMMANDS_README.md](COMMANDS_README.md).
 
 Hosted mode does not send your Vortex browser cookies or session token to Vortex Web servers. The extension uses your normal browser session locally to request a short-lived Vortex launch authorisation, then the hosted relay verifies that authorisation server-side.
 
