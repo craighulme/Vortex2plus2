@@ -339,9 +339,45 @@ body.vw-menu-open {
     gap: 12px;
     padding: 5px 12px;
     border-bottom: 1px solid rgba(255,255,255,0.04);
+    position: relative;
+    isolation: isolate;
 }
 
 .lb-row:last-child { border-bottom: none; }
+
+.lb-row > * {
+    position: relative;
+    z-index: 2;
+}
+
+.lb-row-nameplate {
+    overflow: hidden;
+    border-radius: 6px;
+}
+
+.lb-row-nameplate::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-image:
+        linear-gradient(90deg, rgba(8,12,20,0.96) 0%, rgba(8,12,20,0.82) 42%, rgba(8,12,20,0.36) 74%, rgba(8,12,20,0.08) 100%),
+        var(--lb-row-nameplate-image);
+    background-size: cover;
+    background-position: center right;
+}
+
+.lb-row-nameplate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background:
+        radial-gradient(circle at 88% 48%, rgba(255,255,255,0.15), transparent 30%),
+        linear-gradient(180deg, rgba(255,255,255,0.06), transparent 60%);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+    pointer-events: none;
+}
 
 .lb-self {
     background: rgba(255,255,255,0.09);
@@ -376,14 +412,235 @@ body.vw-menu-open {
     text-overflow: ellipsis;
     display: flex;
     align-items: center;
+    min-width: 0;
 }
 
 .lb-badge-slot {
-    width: 20px;
+    min-width: 20px;
+    max-width: 50px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 3px;
+}
+
+.lb-vw-badge {
+    width: 17px;
+    height: 17px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 5px;
+    color: #fff;
+    background: rgba(59, 130, 246, 0.9);
+    box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,0.28),
+        0 2px 7px rgba(0,0,0,0.3);
+}
+
+.lb-vw-badge svg {
+    width: 12px;
+    height: 12px;
+    display: block;
+    fill: currentColor;
+}
+
+.lb-has-badge-gradient {
+    background: var(--lb-badge-gradient) !important;
+}
+
+.vw-badge-effect-shine {
+    position: relative;
+    overflow: hidden;
+}
+
+.vw-badge-effect-shine::after {
+    content: "";
+    position: absolute;
+    inset: -30% 100% -30% -80%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
+    transform: rotate(18deg);
+    animation: vw-badge-shine 2.4s linear infinite;
+}
+
+.vw-badge-effect-phantasm {
+    animation: vw-badge-phantasm 2.8s ease-in-out infinite;
+}
+
+.vw-badge-effect-toxic {
+    animation: vw-badge-toxic 2.2s ease-in-out infinite;
+}
+
+.vw-badge-effect-pulse {
+    animation: vw-name-pulse 1.5s ease-in-out infinite;
+}
+
+.lb-vw-badge-developer { background: linear-gradient(90deg, #2563eb, #7c3aed); }
+.lb-vw-badge-sponsor { background: linear-gradient(90deg, #db2777, #f59e0b); }
+.lb-vw-badge-supporter { background: linear-gradient(90deg, #0891b2, #16a34a); }
+.lb-vw-badge-contributor { background: linear-gradient(90deg, #475569, #0f766e); }
+.lb-vw-badge-community { background: linear-gradient(90deg, #4f46e5, #0284c7); }
+
+.lb-nameplate {
+    min-width: 0;
+    max-width: 138px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 2px;
+    overflow: hidden;
+    position: relative;
+    isolation: isolate;
+}
+
+.lb-name-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lb-nameplate.has-gradient .lb-name-text {
+    background-image: var(--lb-name-gradient);
+    background-size: 220% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    font-weight: 780;
+}
+
+.lb-nameplate.vw-name-effect-aurora .lb-name-text,
+.lb-nameplate.vw-name-effect-prism .lb-name-text,
+.lb-nameplate.vw-name-effect-ember .lb-name-text,
+.lb-nameplate.vw-name-effect-phantasm .lb-name-text,
+.lb-nameplate.vw-name-effect-toxic .lb-name-text,
+.lb-nameplate.vw-name-effect-noxious .lb-name-text,
+.lb-nameplate.vw-name-effect-glitch .lb-name-text,
+.lb-nameplate.vw-name-effect-pulse .lb-name-text {
+    font-weight: 800;
+}
+
+.lb-nameplate.vw-name-effect-aurora .lb-name-text {
+    animation: vw-name-flow 3.2s linear infinite;
+    text-shadow: 0 0 8px rgba(255,255,255,0.18);
+}
+
+.lb-nameplate.vw-name-effect-prism .lb-name-text {
+    animation: vw-name-chroma 3.8s linear infinite;
+}
+
+.lb-nameplate.vw-name-effect-ember .lb-name-text {
+    animation: vw-name-glow 2.6s ease-in-out infinite;
+}
+
+.lb-nameplate.vw-name-effect-pulse .lb-name-text {
+    animation: vw-name-pulse 1.7s ease-in-out infinite;
+}
+
+.lb-nameplate.vw-name-effect-phantasm .lb-name-text {
+    animation: vw-name-phantasm 3.4s ease-in-out infinite;
+    text-shadow:
+        0 0 8px rgba(192,132,252,0.32),
+        0 0 18px rgba(103,232,249,0.18);
+}
+
+.lb-nameplate.vw-name-effect-toxic .lb-name-text {
+    animation: vw-name-toxic 2.6s ease-in-out infinite;
+    text-shadow:
+        0 0 7px rgba(132,204,22,0.4),
+        0 0 16px rgba(34,197,94,0.22);
+}
+
+.lb-nameplate.vw-name-effect-noxious .lb-name-text {
+    animation: vw-name-noxious 4.2s ease-in-out infinite;
+    text-shadow:
+        0 0 8px rgba(74,222,128,0.32),
+        2px 0 0 rgba(22,163,74,0.24),
+        -2px 0 0 rgba(20,184,166,0.18);
+}
+
+.lb-nameplate.vw-name-effect-glitch .lb-name-text {
+    animation: vw-name-glitch 1.3s steps(2, end) infinite;
+    text-shadow:
+        1px 0 0 rgba(103,232,249,0.55),
+        -1px 0 0 rgba(244,114,182,0.45);
+}
+
+@keyframes vw-name-flow {
+    from { background-position: 0% 50%; }
+    to { background-position: 200% 50%; }
+}
+
+@keyframes vw-name-pulse {
+    0%, 100% { opacity: 0.82; }
+    50% { opacity: 1; }
+}
+
+@keyframes vw-name-chroma {
+    0% { filter: hue-rotate(0deg); }
+    100% { filter: hue-rotate(360deg); }
+}
+
+@keyframes vw-name-glow {
+    0%, 100% { text-shadow: 0 0 4px rgba(255,255,255,0.12); }
+    50% { text-shadow: 0 0 10px rgba(255,255,255,0.45); }
+}
+
+@keyframes vw-name-phantasm {
+    0%, 100% { filter: drop-shadow(0 0 2px rgba(192,132,252,0.2)); transform: translateY(0); }
+    50% { filter: drop-shadow(0 0 10px rgba(103,232,249,0.42)); transform: translateY(-1px); }
+}
+
+@keyframes vw-name-toxic {
+    0%, 100% { filter: saturate(1) brightness(1); }
+    45% { filter: saturate(1.75) brightness(1.12); }
+    60% { filter: saturate(1.2) brightness(0.95); }
+}
+
+@keyframes vw-name-noxious {
+    0%, 100% { letter-spacing: 0; filter: hue-rotate(0deg); }
+    50% { letter-spacing: 0.4px; filter: hue-rotate(28deg); }
+}
+
+@keyframes vw-name-glitch {
+    0%, 100% { transform: translate(0, 0); }
+    20% { transform: translate(1px, 0); }
+    40% { transform: translate(-1px, 0); }
+    60% { transform: translate(0, 1px); }
+    80% { transform: translate(0, -1px); }
+}
+
+@keyframes vw-badge-shine {
+    to { transform: translateX(240%) rotate(18deg); }
+}
+
+@keyframes vw-badge-phantasm {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.28), 0 0 6px rgba(192,132,252,0.25); }
+    50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.34), 0 0 14px rgba(103,232,249,0.45); }
+}
+
+@keyframes vw-badge-toxic {
+    0%, 100% { filter: saturate(1) brightness(1); }
+    50% { filter: saturate(1.8) brightness(1.15); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lb-nameplate.vw-name-effect-aurora .lb-name-text,
+    .lb-nameplate.vw-name-effect-prism .lb-name-text,
+    .lb-nameplate.vw-name-effect-ember .lb-name-text,
+    .lb-nameplate.vw-name-effect-phantasm .lb-name-text,
+    .lb-nameplate.vw-name-effect-toxic .lb-name-text,
+    .lb-nameplate.vw-name-effect-noxious .lb-name-text,
+    .lb-nameplate.vw-name-effect-glitch .lb-name-text,
+    .lb-nameplate.vw-name-effect-pulse .lb-name-text,
+    .vw-badge-effect-shine,
+    .vw-badge-effect-phantasm,
+    .vw-badge-effect-toxic,
+    .vw-badge-effect-pulse {
+        animation: none !important;
+    }
 }
 
 .lb-self .lb-name {

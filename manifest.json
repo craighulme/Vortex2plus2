@@ -12,6 +12,7 @@
   "host_permissions": [
     "https://playvortex.io/*",
     "https://vortex.towerstats.com/*",
+    "https://v22.irongiant.vip/*",
     "https://raw.githubusercontent.com/craighulme/Vortex-Web/*",
     "https://api.github.com/repos/craighulme/Vortex-Web/*",
     "https://raw.githubusercontent.com/craighulme/Vortex2plus2/*",
@@ -41,7 +42,8 @@
       ],
       "js": [
         "js/inject/InjectMapLoader.js",
-        "js/features/fetchCSPBypass.js"
+        "js/features/fetchCSPBypass.js",
+        "js/features/ProfileCosmetics.js"
       ],
       "run_at": "document_idle"
     },
@@ -60,6 +62,7 @@
         "https://vortex.towerstats.com/*"
       ],
       "js": [
+        "js/features/VortexWebCosmetics.js",
         "js/webVortexLoader.js",
         "js/lightMode.js",
         "js/features/UpdateNotifier.js",
