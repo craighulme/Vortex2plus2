@@ -22,7 +22,7 @@ Version `0.5.0` is a major internal migration release. The old override-heavy la
 - Multiplayer chat, player replication, leaderboard, nameplates, and profile cosmetics
 - Current map loading for supported Vortex games
 - Avatar clothing support for existing shirt, pants, face, body type, and colour data
-- WebGPU renderer path with WebGL-era code being phased out
+- WebGPU renderer path with older renderer code being phased out
 - Cascaded shadow work with runtime quality controls
 - Runtime settings menu, HUD, notifications, audio, pointer lock, and shortcut handling
 - Command-gated browser tools for authorised users

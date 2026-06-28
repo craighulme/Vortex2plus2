@@ -63,4 +63,54 @@ describe("WorldService", () => {
     expect(loaded.spawn).toEqual({ x: 11.5, y: 13, z: 20, ry: 0 });
     expect(spawns).toEqual([[11.5, 13, 20, 0]]);
   });
+
+  it("splits static map batches by render chunk before material", () => {
+    const world = new WorldService();
+    const scene = {
+      added: [] as any[],
+      add(mesh: unknown) {
+        this.added.push(mesh);
+      }
+    };
+    const material = { uuid: "shared-material" };
+    const makeGeometry = (): any => ({
+      attributes: { position: { count: 3 } },
+      clone: () => makeGeometry(),
+      applyMatrix4: () => {},
+      computeBoundingBox: () => {},
+      computeBoundingSphere: () => {},
+      dispose: () => {}
+    });
+    world.attachLegacy({
+      scene,
+      bufferGeometryUtils: {
+        mergeGeometries: (geometries: unknown[]) => ({ ...makeGeometry(), mergedCount: geometries.length })
+      },
+      createMesh: (geometry: unknown, batchMaterial: unknown) => ({
+        geometry,
+        material: batchMaterial,
+        userData: {},
+        updateMatrix: () => {}
+      }),
+      addStud: (...args: unknown[]) => {
+        const x = Number(args[4] || 0);
+        const z = Number(args[6] || 0);
+        return [{
+          userData: { vwebRenderChunk: `${Math.floor(x / 128)},${Math.floor(z / 128)}` },
+          material,
+          geometry: makeGeometry(),
+          matrix: {},
+          updateMatrix: () => {}
+        }, `stud-${x}`];
+      }
+    });
+
+    world.loadMapParts("chunked", [
+      { P: [0, 2, 0], S: [4, 2, 4], C: "ff0000" },
+      { P: [200, 2, 0], S: [4, 2, 4], C: "ff0000" }
+    ], 0, 0, 0, { preserveWorldCoords: true });
+
+    expect(scene.added).toHaveLength(2);
+    expect(scene.added.map((mesh) => mesh.userData.vwebRenderChunk).sort()).toEqual(["0,0", "1,0"]);
+  });
 });

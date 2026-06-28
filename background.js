@@ -3,7 +3,7 @@ const UPDATE_MANIFEST_URLS = [
     "https://api.github.com/repos/craighulme/Vortex2plus2/contents/extension-update.json?ref=main"
 ];
 const REPO_URL = "https://github.com/craighulme/Vortex-Web";
-const UPDATE_ALARM = "v22-update-check";
+const UPDATE_ALARM = "vweb-update-check";
 const CHECK_INTERVAL_MINUTES = 240;
 const CACHE_MAX_AGE_MS = 60 * 60 * 1000;
 const LAUNCH_CONFIG_MAX_AGE_MS = 5 * 60 * 1000;
@@ -73,7 +73,7 @@ async function ephemeralStorageTake(key) {
 
 async function storeLaunchConfig(config) {
     const launchId = crypto.randomUUID ? crypto.randomUUID() : randomHex(16);
-    await ephemeralStorageSet(`v22Launch:${launchId}`, {
+    await ephemeralStorageSet(`vwebLaunch:${launchId}`, {
         ...(config || {}),
         createdAt: Date.now()
     });
@@ -82,7 +82,7 @@ async function storeLaunchConfig(config) {
 
 async function takeLaunchConfig(launchId) {
     if (!launchId) return null;
-    const config = await ephemeralStorageTake(`v22Launch:${launchId}`);
+    const config = await ephemeralStorageTake(`vwebLaunch:${launchId}`);
     if (!config?.createdAt || Date.now() - Number(config.createdAt) > LAUNCH_CONFIG_MAX_AGE_MS) return null;
     return config;
 }
@@ -118,24 +118,24 @@ async function fetchUpdateManifest() {
 async function getUpdateStatus(force = false) {
     const now = Date.now();
     const cached = await storageGet("local", {
-        v22UpdateManifest: null,
-        v22UpdateCheckedAt: 0
+        vwebUpdateManifest: null,
+        vwebUpdateCheckedAt: 0
     });
-    let update = cached.v22UpdateManifest;
-    const checkedAt = Number(cached.v22UpdateCheckedAt || 0);
+    let update = cached.vwebUpdateManifest;
+    const checkedAt = Number(cached.vwebUpdateCheckedAt || 0);
 
     if (force || !update || now - checkedAt > CACHE_MAX_AGE_MS) {
         try {
             update = await fetchUpdateManifest();
             await storageSet("local", {
-                v22UpdateManifest: update,
-                v22UpdateCheckedAt: now,
-                v22UpdateCheckError: ""
+                vwebUpdateManifest: update,
+                vwebUpdateCheckedAt: now,
+                vwebUpdateCheckError: ""
             });
         } catch (err) {
             await storageSet("local", {
-                v22UpdateCheckedAt: now,
-                v22UpdateCheckError: String(err && err.message || err)
+                vwebUpdateCheckedAt: now,
+                vwebUpdateCheckError: String(err && err.message || err)
             });
         }
     }
@@ -181,17 +181,17 @@ extensionApi.alarms?.onAlarm?.addListener?.((alarm) => {
 });
 
 extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message?.type === "vweb:getUpdateStatus" || message?.type === "v22:getUpdateStatus") {
+    if (message?.type === "vweb:getUpdateStatus") {
         getUpdateStatus(Boolean(message.force)).then(sendResponse);
         return true;
     }
-    if ((message?.type === "vweb:dismissUpdate" || message?.type === "v22:dismissUpdate") && message.version) {
+    if (message?.type === "vweb:dismissUpdate" && message.version) {
         storageSet("local", { dismissedUpdateVersion: String(message.version) }).then(() => {
             sendResponse({ ok: true });
         });
         return true;
     }
-    if (message?.type === "vweb:storeLaunchConfig" || message?.type === "v22:storeLaunchConfig") {
+    if (message?.type === "vweb:storeLaunchConfig") {
         storeLaunchConfig(message.config).then((launchId) => {
             sendResponse({ ok: true, launchId });
         }).catch((err) => {
@@ -199,7 +199,7 @@ extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         return true;
     }
-    if (message?.type === "vweb:takeLaunchConfig" || message?.type === "v22:takeLaunchConfig") {
+    if (message?.type === "vweb:takeLaunchConfig") {
         takeLaunchConfig(String(message.launchId || "")).then((config) => {
             sendResponse({ ok: Boolean(config), config });
         }).catch((err) => {

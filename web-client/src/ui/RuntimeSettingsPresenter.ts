@@ -48,6 +48,7 @@ export type RuntimeSettingsPresenterOptions = {
   setToneMappingMode(value: string): string;
   setRenderFog(value: boolean): any;
   setFogDistance(value: number): any;
+  setRenderDistance(value: number, profile?: "performance" | "balanced" | "visual"): any;
   refreshStudMaterialTextures(): void;
   markSceneMaterialsForShaderUpdate(): void;
 };
@@ -172,6 +173,7 @@ export class RuntimeSettingsPresenter {
     const gameId = config?.officialGameId || new URLSearchParams(this.options.windowRef.location.search).get("VortexGameId") || "-";
     const playerCount = this.options.document.querySelectorAll("#lb-body [data-player-id]").length || 1;
     const fog = this.options.readFogSettings();
+    const renderChunks = quality?.caches?.renderChunks;
     this.options.menu.renderStatus([
       ["Game", `#${gameId}`],
       ["Players", String(playerCount)],
@@ -180,6 +182,7 @@ export class RuntimeSettingsPresenter {
       ["Renderer", this.options.renderer.userData?.vwebBackend || this.options.rendererService.detectRendererBackend(this.options.renderer)],
       ["Shadows", this.options.shadows.snapshot().technique],
       ["Fog", fog.enabled ? `${fog.far} studs` : "Off"],
+      ["Render distance", renderChunks?.cullDistance ? `${renderChunks.cullDistance} studs` : "-"],
       ["Graphics", quality?.shadows ? "Visual" : "Performance"]
     ]);
   }
@@ -316,6 +319,19 @@ export class RuntimeSettingsPresenter {
     }, elements.targets.graphics).title = "Uses loaded stud diffuse/normal textures. Disable if texture state causes dark map rendering.";
 
     makeToggle("Render fog", this.options.readFogSettings().enabled, (checked) => this.options.setRenderFog(checked), elements.targets.graphics);
+    const currentRenderDistance = Number((this.options.windowRef as any).VortexQuality?.get?.()?.caches?.renderChunks?.cullDistance)
+      || Number(this.options.localStorage.getItem("vwebRenderDistance"))
+      || 1200;
+    const renderDistanceControl = makeSlider("Render distance", 200, 2600, currentRenderDistance, 50, (_slider, value) => {
+      this.options.localStorage.setItem("vwebRenderDistance", String(Math.round(value)));
+      this.options.localStorage.setItem("vwebRenderDistanceProfile", "balanced");
+      this.options.setRenderDistance(value, "balanced");
+    }, {
+      target: elements.targets.graphics,
+      storageKey: "vwebRenderDistance",
+      formatter: (value) => `${Math.round(Number(value))} studs`
+    });
+    renderDistanceControl.container.title = "Controls chunk streaming distance. Nearby chunks stay visible; farther chunks can hide outside camera view.";
     makeSlider("Fog distance", 160, 4000, this.options.readFogSettings().far, 20, (_slider, value) => this.options.setFogDistance(value), {
       target: elements.targets.graphics,
       storageKey: "vwebFogDistance",

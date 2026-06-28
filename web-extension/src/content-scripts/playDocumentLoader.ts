@@ -227,7 +227,6 @@ function appendScriptSequential(documentRef: Document, scriptInfo: ScriptInfo): 
 async function readLaunchConfig(launchId: string | null): Promise<LaunchConfig | null> {
     if (!launchId) return null;
     const key = `vwebLaunch:${launchId}`;
-    const legacyKey = `v22Launch:${launchId}`;
     const maxAgeMs = 5 * 60 * 1000;
     if (runtimeApi.sendMessage) {
         try {
@@ -236,9 +235,8 @@ async function readLaunchConfig(launchId: string | null): Promise<LaunchConfig |
         } catch {}
     }
     try {
-        const raw = sessionStorage.getItem(key) || sessionStorage.getItem(legacyKey);
+        const raw = sessionStorage.getItem(key);
         sessionStorage.removeItem(key);
-        sessionStorage.removeItem(legacyKey);
         const cfg = raw ? JSON.parse(raw) as LaunchConfig | null : null;
         if (!cfg?.createdAt || Date.now() - Number(cfg.createdAt) <= maxAgeMs) return cfg;
     } catch {
@@ -249,17 +247,14 @@ async function readLaunchConfig(launchId: string | null): Promise<LaunchConfig |
 function stripLaunchParams(): void {
     const clean = new URL(location.href);
     clean.searchParams.delete("VWEBLaunch");
-    clean.searchParams.delete("V22Launch");
     clean.searchParams.delete("VWEBToken");
-    clean.searchParams.delete("V22Token");
     clean.searchParams.delete("VWEBHub");
-    clean.searchParams.delete("V22Hub");
     history.replaceState(history.state, document.title, clean.toString());
 }
 
 async function rewritePlayDocument(html: string, url: URL, documentRef: Document): Promise<void> {
     const parsed = new DOMParser().parseFromString(html, "text/html");
-    const launchConfig = await readLaunchConfig(url.searchParams.get("VWEBLaunch") || url.searchParams.get("V22Launch"));
+    const launchConfig = await readLaunchConfig(url.searchParams.get("VWEBLaunch"));
     const cosmetics = window.VortexWebCosmetics;
     const cosmeticsState = cosmetics?.load
         ? await cosmetics.load().catch(() => null)

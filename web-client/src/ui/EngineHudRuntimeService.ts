@@ -20,6 +20,7 @@ export type EngineHudRuntimeOptions = {
   setToneMappingMode(value: string): unknown;
   setRenderFog(value: boolean): unknown;
   setFogDistance(value: number): unknown;
+  setRenderDistance(value: number, profile?: "performance" | "balanced" | "visual"): unknown;
   refreshStudMaterialTextures(): void;
   markSceneMaterialsForShaderUpdate(): void;
   input: any;
@@ -88,6 +89,7 @@ export class EngineHudRuntimeService {
       setToneMappingMode: options.setToneMappingMode,
       setRenderFog: options.setRenderFog,
       setFogDistance: options.setFogDistance,
+      setRenderDistance: options.setRenderDistance,
       refreshStudMaterialTextures: options.refreshStudMaterialTextures,
       markSceneMaterialsForShaderUpdate: options.markSceneMaterialsForShaderUpdate
     });

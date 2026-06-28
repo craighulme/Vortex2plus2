@@ -100,7 +100,7 @@ These browser devtools helpers are for local profiling and performance reports.
 | --- | --- |
 | `VortexQuality.get()` | Shows the active renderer quality state. |
 | `VortexQuality.performance()` | Switches to the lightweight local renderer profile: shadows off and antialias disabled on next reload. Modern avatar rendering remains the default. |
-| `VortexQuality.visual()` | Enables higher visual settings such as shadows. Some settings require a reload to recreate the WebGL context. |
+| `VortexQuality.visual()` | Enables higher visual settings such as shadows. Some settings require a reload to recreate the WebGPU renderer. |
 | `VortexQuality.setShadows(value)` | Turns dynamic shadows on or off for the current session. |
 | `VortexQuality.setAvatarRenderer("legacy" \| "modern")` | Switches the local avatar renderer. Modern is the default; legacy remains available for compatibility testing. |
 | `VortexPerf.setEnabled(true)` | Starts lightweight frame-section timing. |
@@ -116,7 +116,7 @@ VortexQuality.performance()
 await VortexPerf.sample(5)
 ```
 
-`VortexQuality.get()` also includes renderer and cache stats such as WebGL version, pixel ratio, draw calls, triangles, GPU texture count, cached geometries, cached materials, and cached shared textures.
+`VortexQuality.get()` also includes renderer and cache stats such as backend, pixel ratio, draw calls, triangles, GPU texture count, cached geometries, cached materials, and cached shared textures.
 
 To compare the new runtime shell against the legacy-only boot path:
 

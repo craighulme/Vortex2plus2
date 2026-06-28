@@ -119,6 +119,7 @@ export class MultiplayerConnectionService {
     } catch {
       // Keep connection setup resilient if URL parsing fails in older browser contexts.
     }
+    this.session.markRelayConnecting(hubUrl);
 
     const socket = brokeredRelay
       ? this.multiplayer.createBrokeredSocket(hubUrl) as unknown as SocketLike
@@ -126,6 +127,7 @@ export class MultiplayerConnectionService {
 
     this.session.attachHubSocket(socket, {
       onOpen: () => {
+        this.session.markRelayOpen();
         try {
           context.chat.system("Vortex Web relay connected.");
         } catch {

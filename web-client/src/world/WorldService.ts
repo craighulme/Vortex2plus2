@@ -1,4 +1,10 @@
 import { EntityRegistry, type EntityRecord } from "../runtime/EntityRegistry";
+import {
+  WorldRenderChunkService,
+  type WorldRenderChunkBounds,
+  type WorldRenderChunkCamera,
+  type WorldRenderChunkSnapshot
+} from "./WorldRenderChunkService";
 
 export type WorldPart = {
   id?: string;
@@ -80,6 +86,7 @@ export type FetchMap = (input: string, init?: Record<string, unknown>) => Promis
 export class WorldService {
   readonly entities = new EntityRegistry();
   private legacyHandles: LegacyWorldHandles = {};
+  private readonly renderChunks = new WorldRenderChunkService();
   private readonly maps = new Map<string, LoadedWorldMap>();
 
   attachLegacy(handles: LegacyWorldHandles): void {
@@ -166,6 +173,34 @@ export class WorldService {
     return [...this.maps.values()];
   }
 
+  updateRenderChunks(camera: WorldRenderChunkCamera | null | undefined): WorldRenderChunkSnapshot {
+    return this.renderChunks.update(camera);
+  }
+
+  renderChunkSnapshot(): WorldRenderChunkSnapshot {
+    return this.renderChunks.snapshot();
+  }
+
+  renderChunkDebugRows(): unknown[] {
+    return this.renderChunks.debugRows();
+  }
+
+  setRenderChunkCullDistance(distance: number): number {
+    return this.renderChunks.setCullDistance(distance);
+  }
+
+  setRenderDistance(distance: number, profile?: "performance" | "balanced" | "visual"): WorldRenderChunkSnapshot {
+    return this.renderChunks.setRenderDistance(distance, profile);
+  }
+
+  setRenderChunkMinimumVisibleDistance(distance: number): number {
+    return this.renderChunks.setMinimumVisibleDistance(distance);
+  }
+
+  setRenderChunkViewCullingEnabled(enabled: boolean): void {
+    this.renderChunks.setViewCullingEnabled(enabled);
+  }
+
   remove(id: string): boolean {
     const entity = this.entities.get<WorldPart>(id);
     if (entity?.data.legacyId !== undefined) this.removeLegacyPart(entity.data.legacyId);
@@ -221,20 +256,21 @@ export class WorldService {
     }
 
     const geometries = new Map<string, LegacyGeometryLike[]>();
-    const materials = new Map<string, { material: unknown; disableCastShadow: boolean }>();
+    const materials = new Map<string, { material: unknown; disableCastShadow: boolean; chunkKey: string }>();
     for (const source of sourceMeshes) {
       const mesh = source as LegacyMeshLike;
       const disableCastShadow = mesh.userData?.vwebDisableCastShadow === true;
+      const chunkKey = typeof mesh.userData?.vwebRenderChunk === "string" ? mesh.userData.vwebRenderChunk : "0,0";
       const materialKey = Array.isArray(mesh.material)
         ? mesh.material.map((material) => material?.uuid || "material").join("|")
         : mesh.material?.uuid || "material";
-      const key = `${materialKey}|cast:${disableCastShadow ? 0 : 1}`;
+      const key = `${chunkKey}|${materialKey}|cast:${disableCastShadow ? 0 : 1}`;
       mesh.updateMatrix?.();
       const geometry = mesh.geometry?.clone?.();
       if (!geometry) continue;
       geometry.applyMatrix4?.(mesh.matrix);
       if (!materials.has(key)) {
-        materials.set(key, { material: mesh.material, disableCastShadow });
+        materials.set(key, { material: mesh.material, disableCastShadow, chunkKey });
         geometries.set(key, [geometry]);
       } else {
         geometries.get(key)?.push(geometry);
@@ -250,6 +286,7 @@ export class WorldService {
         batches.push(...this.createSplitMaterialBatches(
           name,
           key,
+          materialInfo.chunkKey,
           value,
           { material: materialInfo.material, disableCastShadow: materialInfo.disableCastShadow },
           mergeGeometries,
@@ -274,7 +311,9 @@ export class WorldService {
         ...(mergedMesh.userData || {}),
         vwebRuntimeKind: "world-map-batch",
         vwebMapName: name,
-        vwebBatchKey: key
+        vwebBatchKey: key,
+        vwebRenderChunk: materialInfo.chunkKey,
+        vwebRenderBatchParts: value.length
       };
       const shadows = this.legacyShadowsActive();
       if (materialInfo.disableCastShadow) mergedMesh.userData.vwebDisableCastShadow = true;
@@ -283,6 +322,7 @@ export class WorldService {
       mergedMesh.matrixAutoUpdate = false;
       mergedMesh.frustumCulled = true;
       mergedMesh.updateMatrix?.();
+      this.renderChunks.register(mergedMesh, name, materialInfo.chunkKey, geometryBounds(merged));
       sceneAdd.call(this.legacyHandles.scene, mergedMesh);
       objects?.push(mergedMesh);
       batches.push(mergedMesh);
@@ -293,6 +333,7 @@ export class WorldService {
   private createSplitMaterialBatches(
     name: string,
     key: string,
+    chunkKey: string,
     sourceGeometries: LegacyGeometryLike[],
     materialInfo: { material: Array<unknown>; disableCastShadow: boolean },
     mergeGeometries: (geometries: LegacyGeometryLike[]) => LegacyGeometryLike | null,
@@ -331,7 +372,9 @@ export class WorldService {
         vwebRuntimeKind: "world-map-batch",
         vwebMapName: name,
         vwebBatchKey: `${key}|${faceKind}`,
-        vwebBatchFace: faceKind
+        vwebBatchFace: faceKind,
+        vwebRenderChunk: chunkKey,
+        vwebRenderBatchParts: batchGeometries.length
       };
       if (materialInfo.disableCastShadow) mesh.userData.vwebDisableCastShadow = true;
       mesh.castShadow = shadows && !materialInfo.disableCastShadow;
@@ -339,6 +382,7 @@ export class WorldService {
       mesh.matrixAutoUpdate = false;
       mesh.frustumCulled = true;
       mesh.updateMatrix?.();
+      this.renderChunks.register(mesh, name, chunkKey, geometryBounds(merged));
       sceneAdd.call(this.legacyHandles.scene, mesh);
       objects?.push(mesh);
       batches.push(mesh);
@@ -352,6 +396,7 @@ export class WorldService {
   private removeLegacyBatchMesh(mesh: unknown): void {
     const sceneRemove = readFunction(this.legacyHandles.scene, "remove");
     if (sceneRemove) sceneRemove.call(this.legacyHandles.scene, mesh);
+    this.renderChunks.unregister(mesh as LegacyMeshLike);
     const objects = Array.isArray(this.legacyHandles.objects) ? this.legacyHandles.objects : null;
     if (objects) {
       const index = objects.indexOf(mesh);
@@ -381,6 +426,7 @@ type LegacyMeshLike = {
   material?: { uuid?: string } | Array<{ uuid?: string }>;
   geometry?: LegacyGeometryLike;
   matrix?: unknown;
+  visible?: boolean;
   castShadow?: boolean;
   receiveShadow?: boolean;
   matrixAutoUpdate?: boolean;
@@ -392,6 +438,10 @@ type LegacyGeometryLike = {
   clone?: () => LegacyGeometryLike;
   applyMatrix4?: (matrix: unknown) => void;
   attributes?: Record<string, LegacyAttributeLike | undefined>;
+  boundingBox?: {
+    min?: { x?: number; y?: number; z?: number };
+    max?: { x?: number; y?: number; z?: number };
+  } | null;
   dispose?: () => void;
   computeBoundingBox?: () => void;
   computeBoundingSphere?: () => void;
@@ -481,6 +531,32 @@ function extractFaces(
 
 function disposeGeometry(geometry: unknown): void {
   (geometry as { dispose?: () => void } | null)?.dispose?.();
+}
+
+function geometryBounds(geometry: LegacyGeometryLike): WorldRenderChunkBounds | null {
+  const min = geometry.boundingBox?.min;
+  const max = geometry.boundingBox?.max;
+  const minX = Number(min?.x);
+  const minY = Number(min?.y);
+  const minZ = Number(min?.z);
+  const maxX = Number(max?.x);
+  const maxY = Number(max?.y);
+  const maxZ = Number(max?.z);
+  if (![minX, minY, minZ, maxX, maxY, maxZ].every(Number.isFinite)) return null;
+  const center = {
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
+    z: (minZ + maxZ) / 2
+  };
+  const dx = maxX - center.x;
+  const dy = maxY - center.y;
+  const dz = maxZ - center.z;
+  return {
+    center,
+    radius: Math.sqrt(dx * dx + dy * dy + dz * dz),
+    min: { x: minX, y: minY, z: minZ },
+    max: { x: maxX, y: maxY, z: maxZ }
+  };
 }
 
 function calculateSourceBounds(mapData: RawMapPart[]): ReturnType<typeof emptyBounds> {

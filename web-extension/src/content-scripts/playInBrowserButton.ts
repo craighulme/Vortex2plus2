@@ -335,10 +335,10 @@ export function installPlayInBrowserButton(documentRef: Document = document, win
         } catch {}
     }
 
-    function launchLocalRelay(documentRef: Document, gameId: number): void {
+function launchLocalRelay(documentRef: Document, gameId: number): void {
         const frame = documentRef.createElement("iframe");
         frame.hidden = true;
-        frame.src = `v22bridge://start?game=${encodeURIComponent(String(gameId))}`;
+        frame.src = `vwebbridge://start?game=${encodeURIComponent(String(gameId))}`;
         documentRef.documentElement.appendChild(frame);
         setTimeout(() => frame.remove(), 5000);
     }

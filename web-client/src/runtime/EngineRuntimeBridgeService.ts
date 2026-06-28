@@ -64,7 +64,11 @@ type EngineRuntimeBridgeConfig = {
   compatibility: EngineCompatibilityService;
   frameLoop: FrameLoopService;
   profiler: { begin(now: number): unknown; mark(frame: unknown, label: string): void; end(frame: unknown): void };
-  worldService: { attachLegacy(handles: Record<string, unknown>): void };
+  worldService: {
+    attachLegacy(handles: Record<string, unknown>): void;
+    renderChunkSnapshot?(): unknown;
+    setRenderDistance?(distance: number, profile?: "performance" | "balanced" | "visual"): unknown;
+  };
   worldRuntime: WorldRuntimeLike;
   bufferGeometryUtils: unknown;
   keys: Record<string, boolean>;
@@ -106,13 +110,15 @@ export class EngineRuntimeBridgeService {
         geometries: config.worldRuntime.geometryService.snapshot().geometries,
         materials: config.worldRuntime.materialService.snapshot().materials,
         textures: config.worldRuntime.textureService.snapshot().textures,
-        parts: config.worldRuntime.partService.snapshot()
+        parts: config.worldRuntime.partService.snapshot(),
+        renderChunks: config.worldService.renderChunkSnapshot?.() || null
       }),
       setShadows: config.setShadowsEnabled,
       setShadowQuality: config.setShadowQuality,
       setToneMapping: (value) => config.sceneSettings.setToneMappingMode(String(value)),
       setRenderFog: (value) => config.sceneSettings.setRenderFog(Boolean(value)),
       setFogDistance: (value) => config.sceneSettings.setFogDistance(Number(value)),
+      setRenderDistance: (value, profile) => config.worldService.setRenderDistance?.(Number(value), profile),
       setStudTexturesEnabled: (value) => config.worldRuntime.textureService.setStudTextures(!!value),
       refreshMaterials: () => {
         config.worldRuntime.refreshStudMaterialTextures();

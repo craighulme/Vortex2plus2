@@ -21,6 +21,7 @@ const scene = new THREE.Scene();
 
 let fov = 85;
 const camera = new THREE.PerspectiveCamera(fov, window.innerWidth / window.innerHeight, 0.1, 3200);
+const renderChunkForward = new THREE.Vector3();
 const cameraService = VortexRuntime.camera;
 if (!cameraService) {
     throw new Error('[camera] VortexRuntime camera service is required before the engine starts.');
@@ -89,6 +90,9 @@ const worldRuntime = VortexRuntime.engineWorld.configure({
 });
 const worldRuntimeHandles = worldRuntime.worldRuntime;
 const runtimeAsset = worldRuntime.runtimeAsset;
+applyStoredRenderDistance(VortexRuntime.world, localStorage);
+const chunkDebug = createChunkDebugController(THREE, scene, VortexRuntime.world);
+window.VortexChunkDebug = chunkDebug.api;
 
 const WORLD_FLOOR_Y = 1.5;
 const G = WORLD_FLOOR_Y;
@@ -190,6 +194,7 @@ hudRuntime = VortexRuntime.engineHud.configure({
     setToneMappingMode: (value) => sceneSettings.setToneMappingMode(value),
     setRenderFog: (value) => sceneSettings.setRenderFog(value),
     setFogDistance: (value) => sceneSettings.setFogDistance(value),
+    setRenderDistance: (value, profile) => VortexRuntime.world.setRenderDistance(value, profile),
     refreshStudMaterialTextures: worldRuntime.refreshStudMaterialTextures,
     markSceneMaterialsForShaderUpdate: () => sceneSettings.markMaterialsForShaderUpdate(),
     input: runtimeInput,
@@ -249,8 +254,141 @@ VortexRuntime.engineRuntimeBridge.install({
     update: (dt) => localMovement.update(dt),
     updateCamera: (dt) => localMovement.updateCamera(dt),
     updateDebug: () => {
+        camera.getWorldDirection?.(renderChunkForward);
+        VortexRuntime.world.updateRenderChunks({
+            x: camera.position.x,
+            y: camera.position.y,
+            z: camera.position.z,
+            forward: {
+                x: renderChunkForward.x,
+                y: renderChunkForward.y,
+                z: renderChunkForward.z,
+            },
+            verticalFovDegrees: camera.fov,
+            aspect: camera.aspect,
+        });
+        chunkDebug.update();
         worldRuntime.updateDebug(getCharacter(), characterMetrics());
     },
     updateLighting: updateLightingForFrame,
 });
+}
+
+function applyStoredRenderDistance(worldService, storage) {
+    const distance = Number(storage.getItem("vwebRenderDistance"));
+    if (!Number.isFinite(distance)) return;
+    const rawProfile = storage.getItem("vwebRenderDistanceProfile");
+    const profile = rawProfile === "performance" || rawProfile === "visual" ? rawProfile : "balanced";
+    worldService.setRenderDistance?.(distance, profile);
+}
+
+function createChunkDebugController(THREE, scene, worldService) {
+    const helpers = new Map();
+    let visible = false;
+
+    function rows() {
+        return worldService.renderChunkDebugRows?.() || [];
+    }
+
+    function snapshot() {
+        return worldService.renderChunkSnapshot?.() || null;
+    }
+
+    function clear() {
+        for (const helper of helpers.values()) {
+            scene.remove(helper);
+            helper.geometry?.dispose?.();
+            helper.material?.dispose?.();
+        }
+        helpers.clear();
+    }
+
+    function makeHelper(row) {
+        if (!row?.min || !row?.max) return null;
+        const box = new THREE.Box3(
+            new THREE.Vector3(row.min.x, row.min.y, row.min.z),
+            new THREE.Vector3(row.max.x, row.max.y, row.max.z)
+        );
+        const helper = new THREE.Box3Helper(box, row.visible ? 0x38d46f : 0xff4d4d);
+        helper.name = `VortexRenderChunk:${row.chunkKey}`;
+        helper.renderOrder = 9999;
+        helper.userData = {
+            ...(helper.userData || {}),
+            vwebRuntimeKind: "render-chunk-debug",
+            vwebRenderChunk: row.chunkKey
+        };
+        return helper;
+    }
+
+    function update() {
+        if (!visible) return;
+        const nextRows = rows();
+        const nextIds = new Set(nextRows.map((row) => row.id));
+        for (const [id, helper] of helpers) {
+            if (nextIds.has(id)) continue;
+            scene.remove(helper);
+            helper.geometry?.dispose?.();
+            helper.material?.dispose?.();
+            helpers.delete(id);
+        }
+        for (const row of nextRows) {
+            const helper = helpers.get(row.id);
+            if (helper) {
+                helper.visible = true;
+                helper.material?.color?.setHex?.(row.visible ? 0x38d46f : 0xff4d4d);
+                continue;
+            }
+            const next = makeHelper(row);
+            if (!next) continue;
+            helpers.set(row.id, next);
+            scene.add(next);
+        }
+    }
+
+    const api = {
+        show() {
+            visible = true;
+            update();
+            return snapshot();
+        },
+        hide() {
+            visible = false;
+            clear();
+            return snapshot();
+        },
+        toggle() {
+            return visible ? api.hide() : api.show();
+        },
+        rows() {
+            const data = rows();
+            console.table(data.map((row) => ({
+                chunk: row.chunkKey,
+                visible: row.visible,
+                objects: row.objects,
+                x: Math.round(row.center?.x ?? 0),
+                y: Math.round(row.center?.y ?? 0),
+                z: Math.round(row.center?.z ?? 0),
+                radius: Math.round(row.radius)
+            })));
+            return data;
+        },
+        snapshot,
+        setDistance(value) {
+            const result = worldService.setRenderDistance?.(Number(value), "balanced") || worldService.setRenderChunkCullDistance?.(Number(value));
+            update();
+            return result || snapshot();
+        },
+        setNear(value) {
+            const result = worldService.setRenderChunkMinimumVisibleDistance?.(Number(value));
+            update();
+            return { ...snapshot(), minimumVisibleDistance: result };
+        },
+        setViewCulling(value) {
+            worldService.setRenderChunkViewCullingEnabled?.(!!value);
+            update();
+            return snapshot();
+        }
+    };
+
+    return { api, update };
 }

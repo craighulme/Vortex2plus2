@@ -6,7 +6,7 @@
   "summary": "This release moves Vortex Web onto the new runtime foundation with WebGPU rendering work, improved shadows, cleaner architecture, and a large step away from the old 2+2 override files.",
   "changelog": [
     "Moved the game client toward a single bundled Vortex Web runtime instead of order-dependent override scripts.",
-    "Added the new WebGPU renderer path with WebGL-era renderer code being phased out.",
+    "Added the new WebGPU renderer path with older renderer code being phased out.",
     "Reworked shadows with quality presets and better runtime control.",
     "Ported major engine, world, input, audio, HUD, avatar, and multiplayer systems into typed web-client services.",
     "Improved profile cosmetics, badges, name effects, nameplates, and leaderboard styling.",

@@ -14,6 +14,7 @@ describe("QualityService", () => {
       setToneMapping: (mode) => calls.push(`tone:${String(mode)}`),
       setRenderFog: (value) => calls.push(`fog:${String(value)}`),
       setFogDistance: (value) => calls.push(`fogDistance:${String(value)}`),
+      setRenderDistance: (value, profile) => calls.push(`renderDistance:${String(value)}:${String(profile)}`),
       diagnoseScene: () => "scene",
       performance: () => "performance",
       visual: () => "visual"
@@ -27,6 +28,7 @@ describe("QualityService", () => {
     service.setToneMapping("none");
     service.setRenderFog(false);
     service.setFogDistance(4000);
+    service.setRenderDistance(900, "performance");
     expect(service.diagnoseTextures()).toBe("textures");
     expect(service.diagnoseScene()).toBe("scene");
     expect(service.performance()).toBe("performance");
@@ -38,7 +40,8 @@ describe("QualityService", () => {
       "studs:false",
       "tone:none",
       "fog:false",
-      "fogDistance:4000"
+      "fogDistance:4000",
+      "renderDistance:900:performance"
     ]);
   });
 
@@ -74,6 +77,7 @@ describe("QualityService", () => {
       setToneMapping: (value) => calls.push(`tone:${String(value)}`),
       setRenderFog: (value) => calls.push(`fog:${String(value)}`),
       setFogDistance: (value) => calls.push(`fogDistance:${String(value)}`),
+      setRenderDistance: (value, profile) => calls.push(`renderDistance:${String(value)}:${String(profile)}`),
       setStudTexturesEnabled: (value) => calls.push(`studs:${String(value)}`),
       refreshMaterials: () => calls.push("refresh"),
       diagnoseSceneInput: () => ({})
@@ -81,6 +85,6 @@ describe("QualityService", () => {
 
     expect(service.get()).toMatchObject({ rendererBackend: "webgpu", studTextures: true });
     service.performance();
-    expect(calls).toEqual(["shadows:false", "quality:low", "tone:none", "fog:false", "studs:false", "refresh"]);
+    expect(calls).toEqual(["shadows:false", "quality:low", "tone:none", "fog:false", "renderDistance:700:performance", "studs:false", "refresh"]);
   });
 });

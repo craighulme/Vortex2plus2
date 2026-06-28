@@ -20,6 +20,8 @@ export type PayloadEncoders = {
   encodeChat(message: unknown): ArrayBuffer;
 };
 
+export type RelayConnectionStatus = "idle" | "connecting" | "open" | "error" | "closed";
+
 export class MultiplayerSessionService {
   private socketValue: SocketLike | null = null;
   private launchInfoValue: LaunchIdentity | null = null;
@@ -29,6 +31,10 @@ export class MultiplayerSessionService {
   private animClockValue = 0;
   private broadcastTimerValue: ReturnType<typeof setInterval> | null = null;
   private broadcastOverrideValue: { state: Record<string, unknown>; until: number } | null = null;
+  private relayStatusValue: RelayConnectionStatus = "idle";
+  private relayUrlValue = "";
+  private relayErrorValue = "";
+  private relayCloseValue: { code?: number; reason?: string; wasClean?: boolean } | null = null;
 
   get socket(): SocketLike | null {
     return this.socketValue;
@@ -144,6 +150,38 @@ export class MultiplayerSessionService {
     return true;
   }
 
+  markRelayConnecting(url: string): void {
+    this.relayStatusValue = "connecting";
+    this.relayUrlValue = String(url || "");
+    this.relayErrorValue = "";
+    this.relayCloseValue = null;
+  }
+
+  markRelayOpen(): void {
+    this.relayStatusValue = "open";
+    this.relayErrorValue = "";
+    this.relayCloseValue = null;
+  }
+
+  markRelayError(error: unknown): void {
+    this.relayStatusValue = "error";
+    this.relayErrorValue = errorMessage(error);
+  }
+
+  markRelayClosed(event?: unknown): void {
+    this.relayStatusValue = "closed";
+    const closeEvent = event && typeof event === "object" ? event as { code?: number; reason?: string; wasClean?: boolean } : null;
+    if (!closeEvent) {
+      this.relayCloseValue = null;
+      return;
+    }
+    const relayClose: { code?: number; reason?: string; wasClean?: boolean } = {};
+    if (typeof closeEvent.code === "number") relayClose.code = closeEvent.code;
+    if (typeof closeEvent.reason === "string") relayClose.reason = closeEvent.reason;
+    if (typeof closeEvent.wasClean === "boolean") relayClose.wasClean = closeEvent.wasClean;
+    this.relayCloseValue = relayClose;
+  }
+
   attachHubSocket(socket: SocketLike, handlers: {
     onOpen(): void;
     onMessage(message: unknown): void;
@@ -161,8 +199,12 @@ export class MultiplayerSessionService {
         handlers.onBadMessage(error, event.data);
       }
     };
-    socket.onclose = handlers.onClose;
-    socket.onerror = () => {
+    socket.onclose = (event) => {
+      this.markRelayClosed(event);
+      handlers.onClose();
+    };
+    socket.onerror = (event) => {
+      this.markRelayError(event);
       handlers.onError();
       socket.close?.();
     };
@@ -277,6 +319,10 @@ export class MultiplayerSessionService {
     animClock: number;
     broadcasting: boolean;
     hasBroadcastOverride: boolean;
+    relayStatus: RelayConnectionStatus;
+    relayUrl: string;
+    relayError: string;
+    relayClose: { code?: number; reason?: string; wasClean?: boolean } | null;
   } {
     return {
       connected: Boolean(this.socketValue),
@@ -285,7 +331,11 @@ export class MultiplayerSessionService {
       hasLaunchInfo: Boolean(this.launchInfoValue),
       animClock: this.animClockValue,
       broadcasting: Boolean(this.broadcastTimerValue),
-      hasBroadcastOverride: Boolean(this.broadcastOverrideValue)
+      hasBroadcastOverride: Boolean(this.broadcastOverrideValue),
+      relayStatus: this.relayStatusValue,
+      relayUrl: this.relayUrlValue,
+      relayError: this.relayErrorValue,
+      relayClose: this.relayCloseValue
     };
   }
 
@@ -298,5 +348,15 @@ export class MultiplayerSessionService {
     this.animClockValue = 0;
     this.broadcastTimerValue = null;
     this.broadcastOverrideValue = null;
+    this.relayStatusValue = "idle";
+    this.relayUrlValue = "";
+    this.relayErrorValue = "";
+    this.relayCloseValue = null;
   }
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String((error as { message?: unknown }).message || "unknown error");
+  return String(error || "unknown error");
 }

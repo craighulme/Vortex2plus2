@@ -8,6 +8,7 @@ export type QualityServiceConfig = {
   setToneMapping(mode: unknown): unknown;
   setRenderFog(value: unknown): unknown;
   setFogDistance(value: unknown): unknown;
+  setRenderDistance(value: unknown, profile?: "performance" | "balanced" | "visual"): unknown;
   diagnoseScene(): unknown;
   performance(): unknown;
   visual(): unknown;
@@ -39,6 +40,7 @@ export type RuntimeQualityOptions = {
   setToneMapping(mode: unknown): unknown;
   setRenderFog(value: unknown): unknown;
   setFogDistance(value: unknown): unknown;
+  setRenderDistance(value: unknown, profile?: "performance" | "balanced" | "visual"): unknown;
   setStudTexturesEnabled(value: boolean): void;
   refreshMaterials(): void;
   diagnoseSceneInput(): Record<string, unknown>;
@@ -75,6 +77,12 @@ export class QualityService {
       setToneMapping: (mode) => options.setToneMapping(mode),
       setRenderFog: (value) => options.setRenderFog(value),
       setFogDistance: (value) => options.setFogDistance(value),
+      setRenderDistance: (value, profile = "balanced") => {
+        const distance = normalizeRenderDistance(value);
+        options.localStorage.setItem("vwebRenderDistance", String(distance));
+        options.localStorage.setItem("vwebRenderDistanceProfile", profile);
+        return options.setRenderDistance(distance, profile);
+      },
       diagnoseScene: () => {
         const report = options.rendererService.diagnoseScene(options.diagnoseSceneInput());
         console.log("[Vortex Web] scene diagnostics", report);
@@ -89,6 +97,9 @@ export class QualityService {
         options.setShadowQuality("low");
         options.setToneMapping("none");
         options.setRenderFog(false);
+        options.setRenderDistance(700, "performance");
+        options.localStorage.setItem("vwebRenderDistance", "700");
+        options.localStorage.setItem("vwebRenderDistanceProfile", "performance");
         options.setStudTexturesEnabled(false);
         options.refreshMaterials();
         return this.get();
@@ -99,6 +110,9 @@ export class QualityService {
         options.setShadowQuality("medium");
         options.setToneMapping("agx");
         options.setRenderFog(false);
+        options.setRenderDistance(1800, "visual");
+        options.localStorage.setItem("vwebRenderDistance", "1800");
+        options.localStorage.setItem("vwebRenderDistanceProfile", "visual");
         options.setStudTexturesEnabled(true);
         options.refreshMaterials();
         return this.get();
@@ -142,6 +156,10 @@ export class QualityService {
     return this.requireConfig().setFogDistance(value);
   }
 
+  setRenderDistance(value: unknown, profile?: "performance" | "balanced" | "visual"): unknown {
+    return this.requireConfig().setRenderDistance(value, profile);
+  }
+
   diagnoseScene(): unknown {
     return this.requireConfig().diagnoseScene();
   }
@@ -162,6 +180,8 @@ export class QualityService {
   private buildSnapshot(options: RuntimeQualityOptions): Record<string, unknown> {
     const runtime = options.windowRef.VortexRuntime as { renderer?: { snapshot?(): unknown } } | undefined;
     const devTools = options.windowRef.VortexRuntimeDevTools as { active?(): boolean } | undefined;
+    const caches = options.caches();
+    const renderChunks = isRecord(caches.renderChunks) ? caches.renderChunks : null;
     return {
       shadows: options.shadowsActive(),
       antialias: options.readStorageFlag("vwebAntialias", false),
@@ -173,6 +193,7 @@ export class QualityService {
         ...options.fogSettings(),
         sceneFog: options.scene.fog ? { near: options.scene.fog.near, far: options.scene.fog.far } : null
       },
+      renderDistance: normalizeRenderDistance(options.localStorage.getItem("vwebRenderDistance") || renderChunks?.cullDistance || 1200),
       shadowQuality: options.rendererService.getShadowQuality?.() || options.shadowQuality(),
       shadowMapSize: options.shadowMapSize(),
       shadowService: options.shadows.snapshot(),
@@ -183,7 +204,17 @@ export class QualityService {
       runtimeDisabled: options.localStorage.getItem("vwebRuntimeDisabled") === "1",
       runtimeDevTools: !!devTools?.active?.(),
       renderer: runtime?.renderer?.snapshot?.() || null,
-      caches: options.caches()
+      caches
     };
   }
+}
+
+function normalizeRenderDistance(value: unknown): number {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1200;
+  return Math.max(200, Math.min(2600, Math.round(number)));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

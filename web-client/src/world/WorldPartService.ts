@@ -38,6 +38,8 @@ type WorldPartConfig = {
   shadowsActive: () => boolean;
 };
 
+const RENDER_CHUNK_SIZE = 128;
+
 export type WorldPartRecord = {
   m: MeshLike | null;
   b: WorldCollider | null;
@@ -90,6 +92,8 @@ export class WorldPartService {
     mesh.userData.vwebPartShape = shape;
     if (type) mesh.userData.vwebPartType = type;
     mesh.userData.vwebPartColor = color;
+    mesh.userData.vwebRenderChunk = renderChunkKey(x, z);
+    mesh.userData.vwebRenderCenter = { x, y: y + sh / 2, z };
     if (shape === "Block" && sh <= 4 && Math.max(sw, sd) >= 128) {
       mesh.userData.vwebDisableCastShadow = true;
     }
@@ -182,4 +186,8 @@ export class WorldPartService {
     if (!this.config) throw new Error("WorldPartService is not configured");
     return this.config;
   }
+}
+
+function renderChunkKey(x: number, z: number): string {
+  return `${Math.floor(x / RENDER_CHUNK_SIZE)},${Math.floor(z / RENDER_CHUNK_SIZE)}`;
 }
