@@ -1,64 +1,65 @@
 # Vortex Web
 
-Vortex Web is an unofficial browser client for Vortex, built from the Vortex2+2 project and moving toward a complete modern rewrite for web play.
+Vortex Web is an unofficial browser client for Vortex. It started from the Vortex2+2 project, but the project is now being rebuilt as a cleaner extension-delivered web runtime.
 
-The goal is simple: keep Vortex playable in the browser, support native-style multiplayer through a relay, and build a cleaner web runtime that can grow with future Vortex features.
+The goal is to keep Vortex playable in the browser, support native-style multiplayer through a hosted relay, and build a modern runtime that can grow with future Vortex features such as streamed assets, richer avatars, equipment, physics, and safe game scripting.
 
 This is not an official Vortex client.
 
-## What Is Changing
+## Direction
 
 Vortex2+2 is being rebranded as Vortex Web.
 
-The rebrand is more than a new name. Vortex Web is becoming a faster, more modular browser client with better update handling, cleaner runtime systems, stronger multiplayer support, and room for future features such as streamed assets, richer avatars, equipment, physics, and safe scripting support.
+The new direction is a browser-first Vortex client, not a web studio. The client should feel close to the native app where it matters, while taking advantage of web rendering, extension delivery, profile cosmetics, and future runtime APIs.
 
-The current public focus is the playable web client. A web studio is not part of this plan.
+Version `0.5.0` is a major internal migration release. The old override-heavy layout is being replaced by a TypeScript/Vite runtime, generated static extension bundles, a WebGPU renderer path, and smaller services for engine, world, avatar, input, UI, multiplayer, diagnostics, and assets.
 
 ## What Works Today
 
 - Browser play from supported Vortex game pages
 - Hosted WebSocket relay support for native-style multiplayer
-- Extension-managed launch flow
-- Multiplayer chat, player replication, health, swords, and building modes
-- Current map loading and classic bundled maps
+- Extension-managed launch flow with short-lived game authorisation
+- Multiplayer chat, player replication, leaderboard, nameplates, and profile cosmetics
+- Current map loading for supported Vortex games
 - Avatar clothing support for existing shirt, pants, face, body type, and colour data
-- Command-gated movement tools for authorised users
-- A new TypeScript/Vite web runtime that now boots alongside the live client
+- WebGPU renderer path with WebGL-era code being phased out
+- Cascaded shadow work with runtime quality controls
+- Runtime settings menu, HUD, notifications, audio, pointer lock, and shortcut handling
+- Command-gated browser tools for authorised users
+- Built extension assets under `runtime/` and `extension/` so public installs do not need to run a build step
 
 ## Runtime Upgrade Progress
 
 Vortex Web is being upgraded in stages so the browser client remains playable during the rewrite.
 
-Already in the new web runtime:
+Moved into the new runtime:
 
-- Modern boot bundle loaded by the extension
-- Runtime service layer for renderer, world, avatar, animation, scripting permissions, protocol definitions, diagnostics, and UI
-- Input and focus service for pointer lock, key state, shortcut blocking, and game focus
-- Runtime HUD panel with live input, world, FPS, SLIM, streaming, sandbox, and avatar status
-- SLIM-style distance band infrastructure for future mesh and streamed asset optimisation
-- Rapier side-by-side physics backend with static map collider sync and raycast support
-- Rapier collider debug drawing from the runtime panel
-- Chat mounted through the new runtime service, with the old script kept as fallback
-- Leaderboard exposed through a typed runtime bridge while the existing renderer stays compatible
-- Client-only physics sandbox for stress testing, falling parts, and a kickable test ball
-- Early asset streaming manifest validation for future models, meshes, textures, avatar items, map chunks, and script packages
-- World map-part normalisation through the new `WorldService`, currently mirrored through the legacy add/remove backend
-- Vortex-Web-only community cosmetic state for future badges, name gradients, nameplates, and supporter features
-- Performance-first renderer defaults, connected-idle multiplayer throttling, and browser profiling helpers
+- Single Vortex Web boot bundle loaded by the extension
+- TypeScript services for renderer, world, input, local player movement, avatar, audio, chat, leaderboard, notifications, settings, diagnostics, and multiplayer relay handling
+- WebGPU renderer path using the current Three.js WebGPU build
+- Shadow service with quality presets and WebGPU-focused CSM work
+- Runtime map bootstrap, world part normalisation, collider helpers, picking, and material handling
+- Modern GLB avatar assets as the default runtime path
+- Hosted relay broker and multiplayer message routing inside the web-client service layer
+- Profile cosmetics, badges, name effects, nameplates, and leaderboard row styling
+- Audio service for client sounds
+- Runtime performance tools, renderer diagnostics, scene diagnostics, and FPS sampling
+- Asset resolver and manifest structure for runtime-owned assets
+- Early physics, SLIM, and streaming foundations for future production use
+- Removal of the old public `overrides/` and `js/` source layout in favour of generated extension/runtime output
 
 Still being migrated:
 
-- Full map loading and batching
-- Full leaderboard renderer ownership inside `web-client`
-- Rapier-driven dynamic bodies and movement parity testing
-- Foot IK on an IK-friendly avatar rig
-- Character movement replacement
-- Avatar equipment slots for hats, masks, tools, shoes, and held items
-- Production SLIM for real meshes, repeated assets, streamed UGC, and map chunks
+- Further cleanup of compatibility bridges left from the Vortex2+2 runtime
+- More world batching, map chunking, collider generation, disposal, and streaming hooks
+- Rapier-driven gameplay physics once movement parity is good enough
+- Foot IK on a rig that supports it cleanly
+- Avatar equipment slots for hats, masks, tools, shoes, back items, and held items
+- Production SLIM-style LOD for meshes, repeated assets, streamed UGC, and map chunks
 - Streamed UGC models/assets from future Vortex APIs
-- Script package loading and the public game API
+- Script package loading, a stable game API, and eventual Lua/WASM integration
 
-Legacy gameplay remains active while these systems move across. That means movement, collision, build placement, sword hits, core map rendering, and multiplayer packets are still protected for compatibility.
+The old 2+2-only hardcoded game systems are not the future direction. Future game-specific items, tools, UI, and behaviour should come through runtime APIs, streamed assets, equipment/attachment systems, and safe script packages.
 
 ## Multiplayer
 
@@ -66,13 +67,13 @@ The official Vortex app uses native networking. Browser extensions cannot use na
 
 Public builds are designed around the hosted Vortex Web relay. Local relay mode exists for private development and testing, but it is not the normal public setup.
 
+Hosted mode does not send your Vortex browser cookies or session token to Vortex Web servers. The extension uses your normal browser session locally to request a short-lived Vortex launch authorisation, then the hosted relay verifies that authorisation server-side.
+
 ## Access
 
 Vortex Web browser multiplayer is license-gated while the project is still moving fast. For access, contact `quackduck.` on Discord.
 
 Command access is feature-gated. Some commands are available to all licensed users, while advanced movement tools require extra authorisation. See [COMMANDS_README.md](COMMANDS_README.md).
-
-Hosted mode does not send your Vortex browser cookies or session token to Vortex Web servers. The extension uses your normal browser session locally to request a short-lived Vortex launch authorisation, then the hosted relay verifies that authorisation server-side.
 
 ## Installation
 
@@ -90,6 +91,8 @@ If the browser client stops loading, first reload the extension and refresh the 
 If launch authorisation fails, the relay or license server may have rejected the request. Newer builds show the server reason where available.
 
 For performance testing, launch from the game page with the normal Play in Web button. Reloading an already-running play page can drop the relay session.
+
+If a game page shows the runtime but does not connect to multiplayer, return to the game page and launch again with the Play in Web button. The relay session is tied to the launch flow.
 
 ## Credits
 
