@@ -181,17 +181,17 @@ extensionApi.alarms?.onAlarm?.addListener?.((alarm) => {
 });
 
 extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message?.type === "v22:getUpdateStatus") {
+    if (message?.type === "vweb:getUpdateStatus" || message?.type === "v22:getUpdateStatus") {
         getUpdateStatus(Boolean(message.force)).then(sendResponse);
         return true;
     }
-    if (message?.type === "v22:dismissUpdate" && message.version) {
+    if ((message?.type === "vweb:dismissUpdate" || message?.type === "v22:dismissUpdate") && message.version) {
         storageSet("local", { dismissedUpdateVersion: String(message.version) }).then(() => {
             sendResponse({ ok: true });
         });
         return true;
     }
-    if (message?.type === "v22:storeLaunchConfig") {
+    if (message?.type === "vweb:storeLaunchConfig" || message?.type === "v22:storeLaunchConfig") {
         storeLaunchConfig(message.config).then((launchId) => {
             sendResponse({ ok: true, launchId });
         }).catch((err) => {
@@ -199,7 +199,7 @@ extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         return true;
     }
-    if (message?.type === "v22:takeLaunchConfig") {
+    if (message?.type === "vweb:takeLaunchConfig" || message?.type === "v22:takeLaunchConfig") {
         takeLaunchConfig(String(message.launchId || "")).then((config) => {
             sendResponse({ ok: Boolean(config), config });
         }).catch((err) => {

@@ -1,34 +1,34 @@
 import type { VortexRuntime } from "./types";
 
-type LegacyWindow = Window & {
+type VortexWindow = Window & {
   VortexRuntime?: VortexRuntime;
-  __v22Runtime?: VortexRuntime;
+  __vwebRuntime?: VortexRuntime;
   _vortex?: unknown;
 };
 
 export function installCompatibilityShim(target: Window, runtime: VortexRuntime): void {
-  const win = target as LegacyWindow;
+  const win = target as VortexWindow;
   win.VortexRuntime = runtime;
-  win.__v22Runtime = runtime;
+  win.__vwebRuntime = runtime;
 
   const existing = Object.getOwnPropertyDescriptor(win, "_vortex");
   if (existing && existing.configurable === false) {
-    runtime.legacy.setVortex(win._vortex ?? null);
+    runtime.vortex.set(win._vortex ?? null);
     return;
   }
 
-  let legacyValue: unknown = win._vortex ?? null;
-  runtime.legacy.setVortex(legacyValue);
+  let vortexValue: unknown = win._vortex ?? null;
+  runtime.vortex.set(vortexValue);
 
   Object.defineProperty(win, "_vortex", {
     configurable: true,
     enumerable: true,
     get() {
-      return legacyValue;
+      return vortexValue;
     },
     set(value: unknown) {
-      legacyValue = value;
-      runtime.legacy.setVortex(value);
+      vortexValue = value;
+      runtime.vortex.set(value);
     }
   });
 }

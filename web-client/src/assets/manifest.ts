@@ -19,16 +19,10 @@ export function normalizeAssetManifest(raw: unknown): AssetManifest {
       studNormal: value.studNormal
     }),
     meshes: pickRecord({
-      swordMdl: value.swordMdl,
-      playerMdl: value.playerMdl,
       malePlayerGlb: value.malePlayerGlb,
       femalePlayerGlb: value.femalePlayerGlb
     }),
     sounds: pickRecord({
-      swordSlash: value.swordSlash,
-      placeBlock: value.placeBlock,
-      sfothSong: value.sfothSong,
-      buildSong: value.buildSong,
       oofSound: value.oofSound
     }),
     maps: pickRecord((value.mapdata as Record<string, unknown> | undefined) ?? {}),

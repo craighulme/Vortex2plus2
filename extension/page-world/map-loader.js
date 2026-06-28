@@ -1,0 +1,1 @@
+function t(){const e=window.VortexRuntime;return e?.worldBootstrap?(e.worldBootstrap.installGlobals(e),e.worldBootstrap.boot(e,fetch.bind(window)),!0):!1}function o(){t()||window.addEventListener("vweb-runtime-ready",()=>t(),{once:!0})}document.readyState==="loading"?window.addEventListener("load",o,{once:!0}):o();

@@ -1,12 +1,13 @@
 import { createVortexRuntime } from "./runtime/createRuntime";
 import { installCompatibilityShim } from "./runtime/compatibility";
+import { launchEngine } from "./engine/EngineLauncher";
 
-declare const __V22_RUNTIME_VERSION__: string;
+declare const __VWEB_RUNTIME_VERSION__: string;
 
 declare global {
   interface Window {
     VortexRuntime?: ReturnType<typeof createVortexRuntime>;
-    __v22Runtime?: ReturnType<typeof createVortexRuntime>;
+    __vwebRuntime?: ReturnType<typeof createVortexRuntime>;
     VortexRuntimeDevTools?: {
       enable(): boolean;
       disable(): boolean;
@@ -16,27 +17,96 @@ declare global {
 }
 
 (() => {
-  if (window.__v22Runtime) return;
-  if (window.localStorage.getItem("v22RuntimeDisabled") === "1") {
-    window.dispatchEvent(new CustomEvent("v22-runtime-disabled"));
+  if (window.__vwebRuntime) return;
+  if (window.localStorage.getItem("vwebRuntimeDisabled") === "1") {
+    window.dispatchEvent(new CustomEvent("vweb-runtime-disabled"));
     return;
   }
 
   const runtime = createVortexRuntime({
-    version: __V22_RUNTIME_VERSION__,
+    version: __VWEB_RUNTIME_VERSION__,
     document,
     window,
     location
   });
 
   installCompatibilityShim(window, runtime);
+  mountRuntimeUi(runtime);
+  mountRuntimeMultiplayer(runtime);
   installRuntimeDevTools(runtime);
   runtime.diagnostics.info("runtime.boot", {
     version: runtime.version,
     protocolVersion: runtime.protocol.version
   });
-  window.dispatchEvent(new CustomEvent("v22-runtime-ready", { detail: runtime }));
+  runtime.worldBootstrap.installGlobals(runtime);
+  window.dispatchEvent(new CustomEvent("vweb-runtime-ready", { detail: runtime }));
+  void launchEngine(runtime)
+    .then(() => runtime.worldBootstrap.boot(runtime, window.fetch.bind(window)))
+    .catch((error) => {
+      runtime.diagnostics.warn("engine.launch.failed", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      console.error("[Vortex Web] engine launch failed", error);
+    });
 })();
+
+function mountRuntimeUi(runtime: ReturnType<typeof createVortexRuntime>): void {
+  const mount = () => {
+    runtime.chat.mount();
+    runtime.leaderboardDom.mount(runtime);
+    mountCameraSensitivityControl(runtime);
+  };
+  mount();
+  if (!runtime.chat.snapshot().mounted) {
+    window.addEventListener("DOMContentLoaded", mount, { once: true });
+  }
+}
+
+function mountCameraSensitivityControl(runtime: ReturnType<typeof createVortexRuntime>): void {
+  const slider = document.getElementById("sp-sens") as HTMLInputElement | null;
+  const value = document.getElementById("sp-sens-val");
+  if (!slider || !value || slider.dataset.vortexRuntimeMounted === "true") return;
+  slider.dataset.vortexRuntimeMounted = "true";
+
+  const readStored = () => {
+    const parsed = Number.parseFloat(localStorage.getItem("vortex_sens") || "1");
+    return Number.isFinite(parsed) ? parsed : 1;
+  };
+  const apply = (next: number) => {
+    value.textContent = `${next.toFixed(2)}x`;
+    const vortex = runtime.vortex.get();
+    if (vortex && typeof vortex === "object") {
+      const setSens = (vortex as { setSens?: unknown }).setSens;
+      if (typeof setSens === "function") setSens.call(vortex, next);
+    }
+  };
+
+  const initial = readStored();
+  slider.value = String(initial);
+  apply(initial);
+  runtime.events.on("vortex:ready", () => apply(readStored()));
+  slider.addEventListener("input", () => {
+    const next = Number.parseFloat(slider.value);
+    const safeValue = Number.isFinite(next) ? next : 1;
+    localStorage.setItem("vortex_sens", String(safeValue));
+    apply(safeValue);
+  });
+}
+
+function mountRuntimeMultiplayer(runtime: ReturnType<typeof createVortexRuntime>): void {
+  const mount = () => {
+    try {
+      runtime.multiplayerBridge.mount(runtime);
+    } catch (error) {
+      runtime.diagnostics.warn("multiplayer.bridge.mount.failed", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  };
+  runtime.events.on("vortex:ready", mount);
+  window.addEventListener("vortex-engine-ready", mount);
+  if (runtime.vortex.get()) mount();
+}
 
 function installRuntimeDevTools(runtime: ReturnType<typeof createVortexRuntime>): void {
   let active = false;
@@ -105,7 +175,7 @@ function installRuntimeDevTools(runtime: ReturnType<typeof createVortexRuntime>)
     clearTimer();
   }, { once: true });
 
-  if (window.localStorage.getItem("v22RuntimeDevTools") === "1") {
+  if (window.localStorage.getItem("vwebRuntimeDevTools") === "1") {
     window.VortexRuntimeDevTools.enable();
   }
 }

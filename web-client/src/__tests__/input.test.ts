@@ -79,4 +79,62 @@ describe("InputService", () => {
 
     expect(input.snapshot().pressed).not.toContain("KeyW");
   });
+
+  it("does not let a stale chat focus flag block gameplay keys", () => {
+    const documentRef = new FakeDocument();
+    const windowRef = new EventTarget();
+    const target = new FakeTarget();
+    const input = new InputService(documentRef as unknown as Document, windowRef as unknown as Window);
+    input.attachTarget(target as unknown as HTMLElement);
+    documentRef.pointerLockElement = target;
+    documentRef.dispatchEvent(new Event("pointerlockchange"));
+
+    (globalThis as typeof globalThis & { _chatFocused?: boolean; Chat?: { isActive(): boolean } })._chatFocused = true;
+    (globalThis as typeof globalThis & { Chat?: { isActive(): boolean } }).Chat = { isActive: () => false };
+
+    const keydown = new Event("keydown") as KeyboardEvent;
+    Object.defineProperties(keydown, {
+      code: { value: "Space" },
+      repeat: { value: false },
+      altKey: { value: false },
+      ctrlKey: { value: false },
+      metaKey: { value: false },
+      shiftKey: { value: false }
+    });
+    documentRef.dispatchEvent(keydown);
+
+    expect(input.snapshot().pressed).toContain("Space");
+
+    delete (globalThis as typeof globalThis & { _chatFocused?: boolean })._chatFocused;
+    delete (globalThis as typeof globalThis & { Chat?: unknown }).Chat;
+  });
+
+  it("tracks gameplay keys from the window capture path", () => {
+    const documentRef = new FakeDocument();
+    const windowRef = new EventTarget();
+    const target = new FakeTarget();
+    const input = new InputService(documentRef as unknown as Document, windowRef as unknown as Window);
+    input.attachTarget(target as unknown as HTMLElement);
+    documentRef.pointerLockElement = target;
+    documentRef.dispatchEvent(new Event("pointerlockchange"));
+
+    const keydown = new Event("keydown", { cancelable: true }) as KeyboardEvent;
+    Object.defineProperties(keydown, {
+      code: { value: "Space" },
+      key: { value: " " },
+      repeat: { value: false },
+      altKey: { value: false },
+      ctrlKey: { value: false },
+      metaKey: { value: false },
+      shiftKey: { value: false }
+    });
+    windowRef.dispatchEvent(keydown);
+
+    expect(input.snapshot()).toMatchObject({
+      pressed: ["Space"],
+      lastKeyDown: "Space",
+      lastKeyRejected: ""
+    });
+    expect(keydown.defaultPrevented).toBe(true);
+  });
 });

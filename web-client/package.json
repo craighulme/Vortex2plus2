@@ -1,5 +1,5 @@
 {
-  "name": "@vortex2plus2/web-client",
+  "name": "@vortex-web/web-client",
   "version": "0.1.0",
   "private": true,
   "type": "module",

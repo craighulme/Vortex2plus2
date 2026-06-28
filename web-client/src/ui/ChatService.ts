@@ -9,6 +9,7 @@ type ChatApi = {
   close(): void;
   activate(): void;
   deactivate(): void;
+  isActive(): boolean;
   send(): void;
 };
 
@@ -250,6 +251,7 @@ export class ChatService {
       close,
       activate,
       deactivate,
+      isActive: () => this.active,
       send
     };
 

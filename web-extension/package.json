@@ -1,0 +1,14 @@
+{
+  "name": "@vortex-web/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vite": "^6.4.3"
+  }
+}

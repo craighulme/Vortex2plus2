@@ -1,6 +1,6 @@
 {
   "name": "Vortex Web",
-  "version": "0.4.6",
+  "version": "0.5.0",
   "manifest_version": 3,
   "description": "Unofficial Vortex browser client with native multiplayer relay support, WebGPU work, and web-first enhancements.",
   "icons": {
@@ -41,8 +41,7 @@
         "styles/main.css"
       ],
       "js": [
-        "js/inject/InjectMapLoader.js",
-        "js/features/fetchCSPBypass.js"
+        "extension/content-scripts/base.js"
       ],
       "run_at": "document_idle"
     },
@@ -52,7 +51,7 @@
         "https://vortex.towerstats.com/search*"
       ],
       "js": [
-        "js/features/Search.js"
+        "extension/content-scripts/search.js"
       ]
     },
     {
@@ -61,12 +60,7 @@
         "https://vortex.towerstats.com/*"
       ],
       "js": [
-        "js/features/VortexWebCosmetics.js",
-        "js/features/ProfileCosmetics.js",
-        "js/webVortexLoader.js",
-        "js/lightMode.js",
-        "js/features/UpdateNotifier.js",
-        "js/features/PlayInBrowserButton.js"
+        "extension/content-scripts/site.js"
       ],
       "run_at": "document_start"
     }
@@ -74,18 +68,17 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "js/features/MapLoader.js",
-        "overrides/*",
-        "overrides/v22-runtime/*",
-        "overrides/libs/*",
+        "extension/page-world/*",
+        "runtime/*",
+        "runtime/page/*",
+        "runtime/vendor/*",
+        "runtime/assets/*",
+        "runtime/assets/avatar/*",
+        "runtime/assets/audio/*",
         "img/*",
         "img/textures/*",
         "img/games/website/icons/*",
-        "img/games/website/banners/*",
-        "files/*",
-        "files/meshes/*",
-        "files/sounds/*",
-        "files/mapdata/*"
+        "img/games/website/banners/*"
       ],
       "matches": [
         "https://playvortex.io/*",

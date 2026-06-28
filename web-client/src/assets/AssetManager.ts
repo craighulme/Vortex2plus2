@@ -24,6 +24,12 @@ export class AssetManager {
     return typeof current === "string" && current ? current : null;
   }
 
+  resolveRequired(path: string): string {
+    const resolved = this.resolve(path);
+    if (!resolved) throw new Error(`asset manifest missing path: ${path}`);
+    return resolved;
+  }
+
   retainJson<T = unknown>(key: string, url: string): Promise<T> {
     return this.retain<T>(key, () => fetch(url, { cache: "force-cache" }).then((res) => {
       if (!res.ok) throw new Error(`asset fetch failed ${res.status}: ${url}`);

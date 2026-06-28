@@ -59,6 +59,9 @@ type RuntimePanelSource = {
       resumePending: boolean;
       focusState: string;
       pressed: string[];
+      lastKeyDown?: string;
+      lastKeyUp?: string;
+      lastKeyRejected?: string;
     };
   };
   avatar: { getPreviewState?(): unknown };
@@ -85,7 +88,7 @@ type RuntimePanelSource = {
   community: {
     snapshot(): { ownUserId: number | null; cachedProfiles: number };
   };
-  legacy: { getVortex(): unknown };
+  vortex: { get(): unknown };
   diagnostics: { warn(event: string, payload?: Record<string, unknown>): void };
 };
 
@@ -108,12 +111,12 @@ export class CoreHudService {
 
   setToolbarVisible(visible: boolean): void {
     this.state = { ...this.state, toolbarVisible: visible };
-    this.document.dispatchEvent(new CustomEvent("v22-ui-toolbar", { detail: { visible } }));
+    this.document.dispatchEvent(new CustomEvent("vweb-ui-toolbar", { detail: { visible } }));
   }
 
   setDebugVisible(visible: boolean): void {
     this.state = { ...this.state, debugVisible: visible };
-    this.document.dispatchEvent(new CustomEvent("v22-ui-debug", { detail: { visible } }));
+    this.document.dispatchEvent(new CustomEvent("vweb-ui-debug", { detail: { visible } }));
   }
 
   setRuntimePanelVisible(visible: boolean): void {
@@ -374,9 +377,14 @@ function formatInput(input: {
   pauseVisible: boolean;
   focusState?: string;
   pressed: string[];
+  lastKeyDown?: string;
+  lastKeyUp?: string;
+  lastKeyRejected?: string;
 }): string {
+  const last = input.lastKeyRejected || input.lastKeyDown || input.lastKeyUp || "";
+  const suffix = last ? `, ${last}` : "";
   if (!input.targetAttached) return "waiting for canvas";
-  if (input.locked) return `${input.pressed.length} keys, locked`;
+  if (input.locked) return `${input.pressed.length} keys, locked${suffix}`;
   if (input.focusState) return input.focusState;
   return input.pauseVisible ? "cursor visible" : input.gameFocused ? "focused" : "idle";
 }

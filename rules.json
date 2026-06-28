@@ -1,57 +1,15 @@
 [
   {
-    "id": 1,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/overrides/demoparts.js"
-      }
-    },
-    "condition": {
-      "urlFilter": "parts.js",
-      "resourceTypes": [
-        "script",
-        "xmlhttprequest"
-      ],
-      "initiatorDomains": [
-        "playvortex.io",
-        "vortex.towerstats.com"
-      ]
-    }
-  },
-  {
     "id": 2,
     "priority": 2,
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/vortex2+2-engine.js"
+        "extensionPath": "/runtime/boot.iife.js"
       }
     },
     "condition": {
       "urlFilter": "vortex-engine.js",
-      "resourceTypes": [
-        "script",
-        "xmlhttprequest"
-      ],
-      "initiatorDomains": [
-        "playvortex.io",
-        "vortex.towerstats.com"
-      ]
-    }
-  },
-  {
-    "id": 3,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/overrides/vortex2+2-multiplayer.js"
-      }
-    },
-    "condition": {
-      "urlFilter": "multiplayer.js",
       "resourceTypes": [
         "script",
         "xmlhttprequest"
@@ -68,7 +26,7 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/libs/three.module.js"
+        "extensionPath": "/runtime/vendor/three.webgpu.js"
       }
     },
     "condition": {
@@ -84,143 +42,16 @@
     }
   },
   {
-    "id": 5,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/overrides/libs/FBXLoader.js"
-      }
-    },
-    "condition": {
-      "urlFilter": "FBXLoader.js",
-      "resourceTypes": [
-        "script",
-        "xmlhttprequest"
-      ],
-      "initiatorDomains": [
-        "playvortex.io",
-        "vortex.towerstats.com"
-      ]
-    }
-  },
-  {
-    "id": 6,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/overrides/notifications.js"
-      }
-    },
-    "condition": {
-      "urlFilter": "notifications.js",
-      "resourceTypes": [
-        "script",
-        "xmlhttprequest"
-      ],
-      "initiatorDomains": [
-        "playvortex.io",
-        "vortex.towerstats.com"
-      ]
-    }
-  },
-  {
-    "id": 7,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/overrides/leaderboard.js"
-      }
-    },
-    "condition": {
-      "urlFilter": "leaderboard.js",
-      "resourceTypes": [
-        "script",
-        "xmlhttprequest"
-      ],
-      "initiatorDomains": [
-        "playvortex.io",
-        "vortex.towerstats.com"
-      ]
-    }
-  },
-  {
-    "id": 8,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/overrides/chat.js"
-      }
-    },
-    "condition": {
-      "urlFilter": "chat.js",
-      "resourceTypes": [
-        "script",
-        "xmlhttprequest"
-      ],
-      "initiatorDomains": [
-        "playvortex.io",
-        "vortex.towerstats.com"
-      ]
-    }
-  },
-  {
-    "id": 9,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/files/meshes/player.fbx"
-      }
-    },
-    "condition": {
-      "urlFilter": "player.fbx",
-      "resourceTypes": [
-        "xmlhttprequest",
-        "media",
-        "other"
-      ],
-      "initiatorDomains": [
-        "playvortex.io",
-        "vortex.towerstats.com"
-      ]
-    }
-  },
-  {
     "id": 10,
     "priority": 2,
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/libs/inflate.min.js"
+        "extensionPath": "/runtime/vendor/inflate.min.js"
       }
     },
     "condition": {
       "urlFilter": "inflate.min.js",
-      "resourceTypes": [
-        "script",
-        "xmlhttprequest"
-      ],
-      "initiatorDomains": [
-        "playvortex.io",
-        "vortex.towerstats.com"
-      ]
-    }
-  },
-  {
-    "id": 13,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/overrides/avatar.js"
-      }
-    },
-    "condition": {
-      "urlFilter": "avatar.js",
       "resourceTypes": [
         "script",
         "xmlhttprequest"
@@ -237,7 +68,7 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/libs/cannon.min.js"
+        "extensionPath": "/runtime/vendor/cannon.min.js"
       }
     },
     "condition": {
@@ -253,32 +84,12 @@
     }
   },
   {
-    "id": 15,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/files/meshes/Head1_diff.png"
-      }
-    },
-    "condition": {
-      "urlFilter": "Head1_diff.png",
-      "resourceTypes": [
-        "image"
-      ],
-      "initiatorDomains": [
-        "playvortex.io",
-        "vortex.towerstats.com"
-      ]
-    }
-  },
-  {
     "id": 16,
     "priority": 2,
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/styles.css"
+        "extensionPath": "/runtime/page/styles.css"
       }
     },
     "condition": {
@@ -298,31 +109,11 @@
     "action": {
       "type": "redirect",
       "redirect": {
-        "extensionPath": "/overrides/libs/BufferGeometryUtils.js"
+        "extensionPath": "/runtime/vendor/BufferGeometryUtils.js"
       }
     },
     "condition": {
       "urlFilter": "BufferGeometryUtils.js",
-      "resourceTypes": [
-        "script"
-      ],
-      "initiatorDomains": [
-        "playvortex.io",
-        "vortex.towerstats.com"
-      ]
-    }
-  },
-  {
-    "id": 18,
-    "priority": 2,
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "extensionPath": "/overrides/social.js"
-      }
-    },
-    "condition": {
-      "urlFilter": "social.js",
       "resourceTypes": [
         "script"
       ],

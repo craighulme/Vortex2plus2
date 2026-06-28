@@ -8,10 +8,10 @@ export default defineConfig({
       formats: ["iife"],
       fileName: () => "boot.iife.js"
     },
-    outDir: "../overrides/v22-runtime",
+    outDir: "../runtime",
     emptyOutDir: true,
     sourcemap: false,
-    target: "es2020",
+    target: "es2022",
     minify: "esbuild",
     rollupOptions: {
       output: {
@@ -21,6 +21,6 @@ export default defineConfig({
     }
   },
   define: {
-    __V22_RUNTIME_VERSION__: JSON.stringify("0.1.0")
+    __VWEB_RUNTIME_VERSION__: JSON.stringify("0.1.0")
   }
 });

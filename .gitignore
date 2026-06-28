@@ -5,6 +5,7 @@ cloudflare-hub/node_modules/
 cloudflare-hub/.wrangler/
 web-client/node_modules/
 web-client/dist/
+web-extension/node_modules/
 native-relay/node_modules/
 native-relay/*.log
 native-relay/logs/
@@ -20,7 +21,6 @@ native-relay/WORKING_STATE.md
 # Private relay prototypes and reverse-engineering notes.
 native-relay/*
 !native-relay/
-!native-relay/Register-NativeBridgeProtocol.ps1
 native-relay/src/index.js
 native-relay/src/headless.js
 native-relay/PROTOCOL_NOTES_PRIVATE.md

@@ -121,30 +121,30 @@ await VortexPerf.sample(5)
 To compare the new runtime shell against the legacy-only boot path:
 
 ```js
-localStorage.setItem("v22RuntimeDisabled", "1")
+localStorage.setItem("vwebRuntimeDisabled", "1")
 location.reload()
 ```
 
 Run the same `await VortexPerf.sample(5)` test after reload. Restore the new runtime with:
 
 ```js
-localStorage.removeItem("v22RuntimeDisabled")
+localStorage.removeItem("vwebRuntimeDisabled")
 location.reload()
 ```
 
-The runtime shell is passive by default. The runtime panel and sandbox scheduler only run after `VortexRuntimeDevTools.enable()` or when `localStorage.v22RuntimeDevTools` is set to `"1"`.
+The runtime shell is passive by default. The runtime panel and sandbox scheduler only run after `VortexRuntimeDevTools.enable()` or when `localStorage.vwebRuntimeDevTools` is set to `"1"`.
 
-The current physics backend can be forced before reload:
+Rapier diagnostics can be enabled before reload:
 
 ```js
-localStorage.setItem("v22PhysicsBackend", "rapier")
+localStorage.setItem("vwebRapierEnabled", "1")
 location.reload()
 ```
 
-Switch back to the legacy physics adapter with:
+Switch back to the default physics adapter with:
 
 ```js
-localStorage.setItem("v22PhysicsBackend", "legacy")
+localStorage.removeItem("vwebRapierEnabled")
 location.reload()
 ```
 

@@ -8,6 +8,9 @@ export type InputSnapshot = {
   resumePending: boolean;
   focusState: InputFocusState;
   pressed: string[];
+  lastKeyDown: string;
+  lastKeyUp: string;
+  lastKeyRejected: string;
 };
 
 export type InputFocusState = "idle" | "focused" | "paused" | "resume-pending";
@@ -21,6 +24,10 @@ type InputEventDetail = {
   ctrlKey: boolean;
   metaKey: boolean;
   shiftKey: boolean;
+};
+
+type ChatFocusApi = {
+  isActive?: () => boolean;
 };
 
 const BROWSER_KEYS = new Set([
@@ -45,6 +52,28 @@ const BROWSER_KEYS = new Set([
   "F12"
 ]);
 
+const GAMEPLAY_KEYS = new Set([
+  "Space",
+  "KeyW",
+  "KeyA",
+  "KeyS",
+  "KeyD",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "ShiftLeft",
+  "ShiftRight",
+  "ControlLeft",
+  "ControlRight",
+  "KeyI",
+  "KeyO",
+  "Comma",
+  "Period",
+  "Backquote",
+  "Slash"
+]);
+
 export class InputService {
   readonly keys: Record<string, boolean> = {};
   private target: HTMLElement | null = null;
@@ -58,9 +87,15 @@ export class InputService {
   private lastPointerLockAttemptAt = 0;
   private lastPointerLockExitAt = 0;
   private suppressPauseOpenUntil = 0;
+  private lastKeyDown = "";
+  private lastKeyUp = "";
+  private lastKeyRejected = "";
+  private readonly handledKeyEvents = new WeakSet<KeyboardEvent>();
   private readonly pointerLockExitCooldownMs = 700;
 
   constructor(private readonly document: Document, private readonly windowRef: Window) {
+    this.windowRef.addEventListener("keydown", this.onKeyDown, true);
+    this.windowRef.addEventListener("keyup", this.onKeyUp, true);
     this.document.addEventListener("keydown", this.onKeyDown, true);
     this.document.addEventListener("keyup", this.onKeyUp, true);
     this.document.addEventListener("pointerlockchange", this.onPointerLockChange);
@@ -196,7 +231,10 @@ export class InputService {
       pauseOpen: this.pauseOpen,
       resumePending: this.resumePending,
       focusState: this.focusState(),
-      pressed: Object.keys(this.keys).filter((key) => this.keys[key])
+      pressed: Object.keys(this.keys).filter((key) => this.keys[key]),
+      lastKeyDown: this.lastKeyDown,
+      lastKeyUp: this.lastKeyUp,
+      lastKeyRejected: this.lastKeyRejected
     };
   }
 
@@ -207,6 +245,8 @@ export class InputService {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.windowRef.removeEventListener("keydown", this.onKeyDown, true);
+    this.windowRef.removeEventListener("keyup", this.onKeyUp, true);
     this.document.removeEventListener("keydown", this.onKeyDown, true);
     this.document.removeEventListener("keyup", this.onKeyUp, true);
     this.document.removeEventListener("pointerlockchange", this.onPointerLockChange);
@@ -229,16 +269,35 @@ export class InputService {
   };
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
-    if (this.gameHasFocus() && !isChatFocused() && shouldBlockBrowserShortcut(event)) {
+    if (this.handledKeyEvents.has(event)) return;
+    this.handledKeyEvents.add(event);
+    const chatFocused = isChatFocused();
+    const focused = this.gameHasFocus();
+    if (focused && !chatFocused && shouldBlockBrowserShortcut(event)) {
       event.preventDefault();
       event.stopImmediatePropagation();
     }
-    if (isChatFocused() || !this.locked) return;
+    if (focused && !chatFocused && shouldPreventGameplayDefault(event)) {
+      event.preventDefault();
+    }
+    if (chatFocused) {
+      this.lastKeyRejected = `${event.code || event.key}:chat`;
+      return;
+    }
+    if (!this.locked) {
+      this.lastKeyRejected = `${event.code || event.key}:unlocked`;
+      return;
+    }
+    this.lastKeyRejected = "";
+    this.lastKeyDown = event.code || event.key || "";
     this.keys[event.code] = true;
     this.document.dispatchEvent(new CustomEvent<InputEventDetail>("vortex-input-keydown", { detail: toInputDetail(event) }));
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
+    if (this.handledKeyEvents.has(event)) return;
+    this.handledKeyEvents.add(event);
+    this.lastKeyUp = event.code || event.key || "";
     this.keys[event.code] = false;
     this.document.dispatchEvent(new CustomEvent<InputEventDetail>("vortex-input-keyup", { detail: toInputDetail(event) }));
   };
@@ -290,8 +349,15 @@ function shouldBlockBrowserShortcut(event: KeyboardEvent): boolean {
   return BROWSER_KEYS.has(event.code);
 }
 
+function shouldPreventGameplayDefault(event: KeyboardEvent): boolean {
+  return GAMEPLAY_KEYS.has(event.code);
+}
+
 function isChatFocused(): boolean {
-  return Boolean((globalThis as typeof globalThis & { _chatFocused?: unknown })._chatFocused);
+  const root = globalThis as typeof globalThis & { _chatFocused?: unknown; Chat?: ChatFocusApi };
+  const chatActive = root.Chat?.isActive;
+  if (typeof chatActive === "function") return !!chatActive.call(root.Chat);
+  return Boolean(root._chatFocused);
 }
 
 function isImmediateAfterExitSecurityError(error: unknown): boolean {

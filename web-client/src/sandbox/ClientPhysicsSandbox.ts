@@ -1,7 +1,7 @@
 type RuntimeLike = {
   renderer: { getHandles(): { scene?: unknown } };
   world: { getLegacyHandles(): { getColliders?: unknown } };
-  legacy: { getVortex(): unknown };
+  vortex: { get(): unknown };
   slim?: {
     registerTarget?(target: {
       id: string;
@@ -292,9 +292,9 @@ export class ClientPhysicsSandbox {
   }
 
   private kickFromPlayer(runtime: RuntimeLike, ball: SandboxBall): void {
-    const legacy = runtime.legacy.getVortex();
-    if (!legacy || typeof legacy !== "object") return;
-    const getCharacter = (legacy as { getCharacter?: unknown }).getCharacter;
+    const vortex = runtime.vortex.get();
+    if (!vortex || typeof vortex !== "object") return;
+    const getCharacter = (vortex as { getCharacter?: unknown }).getCharacter;
     if (typeof getCharacter !== "function") return;
     const character = getCharacter();
     const position = character?.position;
@@ -638,9 +638,9 @@ function readPlayerPosition(runtime: RuntimeLike): Vec3 | null {
 }
 
 function readPlayerTransform(runtime: RuntimeLike): (Vec3 & { rotationY: number }) | null {
-  const legacy = runtime.legacy.getVortex();
-  if (legacy && typeof legacy === "object") {
-    const getCharacter = (legacy as { getCharacter?: unknown }).getCharacter;
+  const vortex = runtime.vortex.get();
+  if (vortex && typeof vortex === "object") {
+    const getCharacter = (vortex as { getCharacter?: unknown }).getCharacter;
     if (typeof getCharacter === "function") {
       const ch = getCharacter();
       if (ch?.position) {

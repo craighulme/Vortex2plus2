@@ -1,3 +1,58 @@
+import { BrokeredRelaySocket, type BrokeredSocketWindow } from "./relay/BrokeredRelaySocket";
+import {
+  BroadcastStateTracker,
+  buildLocalBroadcastState as buildLocalBroadcastStateValue,
+  buildStateAtScenePosition as buildStateAtScenePositionValue,
+  encodeNetworkState,
+  type LocalBroadcastState,
+  type LocalPlayerBroadcastInput
+} from "./relay/BroadcastState";
+import {
+  fetchFriendLists,
+  FriendStatusRegistry,
+  type FriendStatus
+} from "./relay/FriendStatusRegistry";
+import { PlayerNameRegistry } from "./relay/PlayerNameRegistry";
+import {
+  buildHubUrl,
+  createRelayHello,
+  isLocalRelayUrl,
+  isSocketConnecting,
+  isSocketOpen,
+  planBridgeConnection,
+  type BridgeConnectionPlan,
+  type RelayHelloAvatar,
+  type RelayHelloPayload
+} from "./relay/RelayConnectionPlanning";
+import {
+  readRemoteScenePosition,
+  remoteAvatarPatch,
+  RemoteStateDebugTracker,
+  type DebuggableRemote,
+  type RemoteAvatarPatch,
+  type RemoteDebugRow,
+  type RemoteRawState,
+  type RemoteScenePositionResult,
+  type RemoteStateDebug,
+  type RemoteStateStatus
+} from "./relay/RemoteStateDebug";
+import type { BridgeConfig, LaunchIdentity } from "../platform/PlatformBridge";
+
+export type {
+  BridgeConnectionPlan,
+  FriendStatus,
+  LocalBroadcastState,
+  LocalPlayerBroadcastInput,
+  RelayHelloAvatar,
+  RelayHelloPayload,
+  RemoteAvatarPatch,
+  RemoteDebugRow,
+  RemoteRawState,
+  RemoteScenePositionResult,
+  RemoteStateDebug,
+  RemoteStateStatus
+};
+
 export type MultiplayerMessageSummary = {
   type: string;
   at: string;
@@ -6,84 +61,15 @@ export type MultiplayerMessageSummary = {
   id?: number;
 };
 
-export type RemoteStateStatus = "received" | "accepted" | "rejected" | "hidden";
-
-export type RemoteStateDebug = {
-  received: number;
-  accepted: number;
-  rejected: number;
-  lastReceivedAt: number;
-  lastAcceptedAt: number;
-  lastRejectedAt: number;
-  lastRejectedReason: string;
-  lastSource: string;
-  lastRaw: RemoteRawState | null;
-  hiddenReason: string;
-};
-
-export type RemoteRawState = {
-  x?: unknown;
-  y?: unknown;
-  z?: unknown;
-  ry?: unknown;
-  anim?: unknown;
-};
-
-export type RemoteDebugRow = {
-  id: number;
-  username: string;
-  visible: boolean;
-  hasPosition: boolean;
-  ageMs: number | null;
-  received: number;
-  accepted: number;
-  rejected: number;
-  lastRejectedReason: string;
-  hiddenReason: string;
-  lastSource: string;
-  lastRaw: RemoteRawState | null;
-  target: VectorSnapshot | null;
-  mesh: VectorSnapshot | null;
-};
-
-export type RemoteSceneState = {
-  pos: VectorSnapshot;
-  ry: number;
-};
-
-export type RemoteScenePositionResult = {
-  state: RemoteSceneState | null;
-  reason: string;
-};
-
-type VectorSnapshot = {
-  x: number;
-  y: number;
-  z: number;
-};
-
-type DebuggableRemote = {
-  username?: unknown;
-  hasPosition?: unknown;
-  seen?: unknown;
-  tPos?: VectorLike | null;
-  meshes?: {
-    grp?: {
-      visible?: unknown;
-      position?: VectorLike | null;
-    } | null;
-  } | null;
-  stateDebug?: RemoteStateDebug;
-};
-
-type VectorLike = {
-  x?: unknown;
-  y?: unknown;
-  z?: unknown;
-};
-
 export class MultiplayerService {
   private readonly messages: MultiplayerMessageSummary[] = [];
+  private readonly pendingEngineMessages: unknown[] = [];
+  private readonly names = new PlayerNameRegistry();
+  private readonly friends = new FriendStatusRegistry();
+  private readonly remoteDebug = new RemoteStateDebugTracker();
+  private readonly broadcast = new BroadcastStateTracker();
+  private reconnectAttempts = 0;
+  private flushingEngineMessages = false;
 
   recordMessage(message: unknown, enabled = true): void {
     if (!enabled || !message || typeof message !== "object") return;
@@ -106,22 +92,105 @@ export class MultiplayerService {
     return this.messages.map((message) => ({ ...message, ids: [...message.ids] }));
   }
 
-  ensureRemoteDebug(remote: DebuggableRemote): RemoteStateDebug {
-    if (!remote.stateDebug) {
-      remote.stateDebug = {
-        received: 0,
-        accepted: 0,
-        rejected: 0,
-        lastReceivedAt: 0,
-        lastAcceptedAt: 0,
-        lastRejectedAt: 0,
-        lastRejectedReason: "",
-        lastSource: "",
-        lastRaw: null,
-        hiddenReason: ""
-      };
+  queueUntilEngineReady(message: unknown, engineReady: boolean): boolean {
+    if (engineReady) return false;
+    if (message && typeof message === "object" && (message as { type?: unknown }).type === "kicked") return false;
+    this.pendingEngineMessages.push(message);
+    if (this.pendingEngineMessages.length > 200) {
+      this.pendingEngineMessages.splice(0, this.pendingEngineMessages.length - 200);
     }
-    return remote.stateDebug;
+    return true;
+  }
+
+  flushQueuedEngineMessages(engineReady: () => boolean, handleMessage: (message: unknown) => void): void {
+    if (this.flushingEngineMessages || !engineReady()) return;
+    this.flushingEngineMessages = true;
+    try {
+      while (this.pendingEngineMessages.length && engineReady()) {
+        handleMessage(this.pendingEngineMessages.shift());
+      }
+    } finally {
+      this.flushingEngineMessages = false;
+    }
+  }
+
+  pendingEngineMessageCount(): number {
+    return this.pendingEngineMessages.length;
+  }
+
+  isPlaceholderPlayerName(id: unknown, value: unknown): boolean {
+    return this.names.isPlaceholder(id, value);
+  }
+
+  rememberPlayerName(id: unknown, username: unknown): string {
+    return this.names.remember(id, username);
+  }
+
+  playerDisplayName(id: unknown, username: unknown): string {
+    return this.names.displayName(id, username);
+  }
+
+  knownNamesSnapshot(): Record<number, string> {
+    return this.names.snapshot();
+  }
+
+  replaceFriendLists(friends: unknown[] = [], incoming: unknown[] = [], outgoing: unknown[] = []): void {
+    this.friends.replace(friends, incoming, outgoing);
+  }
+
+  async fetchAndReplaceFriendLists(fetcher: typeof fetch): Promise<void> {
+    this.friends.replace(...await fetchFriendLists(fetcher));
+  }
+
+  friendStatus(id: unknown): FriendStatus {
+    return this.friends.status(id);
+  }
+
+  friendStatusMap(ids: Iterable<unknown>): Record<string, FriendStatus> {
+    return this.friends.statusMap(ids);
+  }
+
+  setFriendStatus(id: unknown, status: FriendStatus): FriendStatus {
+    return this.friends.set(id, status);
+  }
+
+  createBrokeredSocket(url: string, windowRef?: BrokeredSocketWindow): BrokeredRelaySocket {
+    return new BrokeredRelaySocket(url, windowRef);
+  }
+
+  isLocalRelayUrl(value: unknown): boolean {
+    return isLocalRelayUrl(value);
+  }
+
+  planBridgeConnection(config: Pick<BridgeConfig, "hubUrl" | "brokered" | "devLocalRelay">): BridgeConnectionPlan {
+    return planBridgeConnection(config);
+  }
+
+  buildHubUrl(config: Pick<BridgeConfig, "hubUrl" | "officialGameId">, launchInfo: Pick<LaunchIdentity, "gameId">, localRelay: boolean, fallbackGameId = 0): string {
+    return buildHubUrl(config, launchInfo, localRelay, fallbackGameId);
+  }
+
+  createRelayHello(input: {
+    launchInfo: LaunchIdentity;
+    config: Pick<BridgeConfig, "officialGameId" | "launchToken" | "identity">;
+    localRelay: boolean;
+    brokeredRelay: boolean;
+    fallbackGameId?: number;
+    avatarOverride?: RelayHelloAvatar | null;
+  }): RelayHelloPayload {
+    return createRelayHello(input);
+  }
+
+  isSocketOpen(socket: unknown): boolean {
+    return isSocketOpen(socket);
+  }
+
+  isSocketConnecting(socket: unknown): boolean {
+    return isSocketConnecting(socket);
+  }
+
+  ensureRemoteDebug(remote: DebuggableRemote): RemoteStateDebug {
+    return this.remoteDebug.ensure(remote);
   }
 
   noteRemoteState(
@@ -131,94 +200,139 @@ export class MultiplayerService {
     playerData?: RemoteRawState | null,
     source = ""
   ): void {
-    if (!remote) return;
-    const debug = this.ensureRemoteDebug(remote);
-    const now = performance.now();
-    debug.lastSource = source || "";
-    debug.lastRaw = playerData ? {
-      x: playerData.x,
-      y: playerData.y,
-      z: playerData.z,
-      ry: playerData.ry,
-      anim: playerData.anim
-    } : null;
-
-    if (status === "received") {
-      debug.received += 1;
-      debug.lastReceivedAt = now;
-    } else if (status === "accepted") {
-      debug.accepted += 1;
-      debug.lastAcceptedAt = now;
-      debug.hiddenReason = "";
-    } else if (status === "rejected") {
-      debug.rejected += 1;
-      debug.lastRejectedAt = now;
-      debug.lastRejectedReason = reason || "unknown";
-    } else if (status === "hidden") {
-      debug.hiddenReason = reason || "hidden";
-    }
+    this.remoteDebug.note(remote, status, reason, playerData, source);
   }
 
   remoteDebugRows(remotes: Map<unknown, DebuggableRemote>, now = performance.now()): RemoteDebugRow[] {
-    return [...remotes.entries()].map(([id, remote]) => {
-      const grp = remote.meshes?.grp || null;
-      const debug = remote.stateDebug;
-      return {
-        id: Number(id),
-        username: String(remote.username || ""),
-        visible: Boolean(grp?.visible),
-        hasPosition: Boolean(remote.hasPosition),
-        ageMs: Number(remote.seen) ? Math.round(now - Number(remote.seen)) : null,
-        received: debug?.received || 0,
-        accepted: debug?.accepted || 0,
-        rejected: debug?.rejected || 0,
-        lastRejectedReason: debug?.lastRejectedReason || "",
-        hiddenReason: debug?.hiddenReason || "",
-        lastSource: debug?.lastSource || "",
-        lastRaw: debug?.lastRaw || null,
-        target: readVector(remote.hasPosition ? remote.tPos : null),
-        mesh: readVector(grp?.position)
-      };
-    });
+    return this.remoteDebug.rows(remotes, now);
   }
 
-  readRemoteScenePosition(
-    playerData: RemoteRawState | null | undefined,
-    convertNativeYToSceneY: (nativeY: number) => number
-  ): RemoteScenePositionResult {
-    if (![playerData?.x, playerData?.y, playerData?.z, playerData?.ry].every(Number.isFinite)) {
-      return { state: null, reason: "non-finite-position" };
+  shouldLogBadRemoteState(id: unknown, now = performance.now(), throttleMs = 3000): boolean {
+    return this.remoteDebug.shouldLogBadState(id, now, throttleMs);
+  }
+
+  remoteAvatarPatch(playerData: unknown): RemoteAvatarPatch | null {
+    return remoteAvatarPatch(playerData);
+  }
+
+  readRemoteScenePosition(playerData: RemoteRawState | null | undefined, convertNativeYToSceneY: (nativeY: number) => number): RemoteScenePositionResult {
+    return readRemoteScenePosition(playerData, convertNativeYToSceneY);
+  }
+
+  nativeFootOffset(value: unknown): number {
+    const offset = Number(value);
+    return Number.isFinite(offset) && Math.abs(offset) < 10 ? offset : NATIVE_CHARACTER_FOOT_OFFSET;
+  }
+
+  nativeYToSceneY(nativeY: unknown, nativeFootOffset: number, sceneFootOffset: number): number {
+    return Number(nativeY) - nativeFootOffset + sceneFootOffset;
+  }
+
+  sceneYToNativeY(sceneY: unknown, nativeFootOffset: number, sceneFootOffset: number): number {
+    return Number(sceneY) - sceneFootOffset + nativeFootOffset;
+  }
+
+  shouldBroadcastLocalState(state: LocalBroadcastState, now = performance.now()): boolean {
+    return this.broadcast.shouldBroadcast(state, now);
+  }
+
+  buildLocalBroadcastState(input: LocalPlayerBroadcastInput): LocalBroadcastState {
+    return buildLocalBroadcastStateValue(input, this.normalizeYaw);
+  }
+
+  buildStateAtScenePosition(input: {
+    position: VectorLike;
+    rotationY: unknown;
+    anim?: string;
+    convertSceneYToNative: (sceneY: number) => number;
+  }): LocalBroadcastState {
+    return buildStateAtScenePositionValue(input, this.normalizeYaw);
+  }
+
+  normalizeYaw(value: unknown): number {
+    let ry = Number(value || 0) % (2 * Math.PI);
+    if (ry > Math.PI) ry -= 2 * Math.PI;
+    else if (ry < -Math.PI) ry += 2 * Math.PI;
+    return ry;
+  }
+
+  encodeNetworkData(data: LocalBroadcastState): LocalBroadcastState {
+    return encodeNetworkState(data);
+  }
+
+  resetLocalBroadcast(): void {
+    this.broadcast.reset();
+  }
+
+  resetReconnect(): void {
+    this.reconnectAttempts = 0;
+  }
+
+  planReconnect(label = "relay", kicked = false): ReconnectPlan {
+    if (kicked) {
+      return {
+        kicked: true,
+        exhausted: false,
+        shouldReconnect: false,
+        attempt: this.reconnectAttempts,
+        delayMs: 0,
+        message: ""
+      };
     }
-    const data = playerData as Required<RemoteRawState>;
-    const x = Number(data.x);
-    const y = convertNativeYToSceneY(Number(data.y));
-    const z = Number(data.z);
-    const ry = Number(data.ry);
-    if (![x, y, z, ry].every(Number.isFinite)) return { state: null, reason: "converted-non-finite-position" };
-    if (Math.abs(x) > REMOTE_MAX_ABS_COORD || Math.abs(y) > REMOTE_MAX_ABS_COORD || Math.abs(z) > REMOTE_MAX_ABS_COORD) {
-      return { state: null, reason: "out-of-range-position" };
+    if (this.reconnectAttempts >= MAX_RECONNECTS) {
+      return {
+        kicked: false,
+        exhausted: true,
+        shouldReconnect: false,
+        attempt: this.reconnectAttempts,
+        delayMs: 0,
+        message: `Vortex Web ${label} disconnected. Reload the page to retry.`
+      };
     }
-    if (y < REMOTE_MIN_SCENE_Y) return { state: null, reason: "below-scene-floor" };
-    return { state: { pos: { x, y, z }, ry }, reason: "" };
+    this.reconnectAttempts += 1;
+    const delayMs = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * Math.pow(1.45, this.reconnectAttempts - 1));
+    return {
+      kicked: false,
+      exhausted: false,
+      shouldReconnect: true,
+      attempt: this.reconnectAttempts,
+      delayMs,
+      message: `Vortex Web ${label} disconnected. Reconnecting in ${(delayMs / 1000).toFixed(1)}s...`
+    };
   }
 
   reset(): void {
     this.messages.length = 0;
+    this.pendingEngineMessages.length = 0;
+    this.names.clear();
+    this.friends.clear();
+    this.remoteDebug.clear();
+    this.resetLocalBroadcast();
+    this.resetReconnect();
   }
 }
 
-const REMOTE_MIN_SCENE_Y = -250;
-const REMOTE_MAX_ABS_COORD = 100000;
+export type ReconnectPlan = {
+  kicked: boolean;
+  exhausted: boolean;
+  shouldReconnect: boolean;
+  attempt: number;
+  delayMs: number;
+  message: string;
+};
+
+type VectorLike = {
+  x?: unknown;
+  y?: unknown;
+  z?: unknown;
+};
+
+const MAX_RECONNECTS = 20;
+const RECONNECT_BASE_MS = 1200;
+const RECONNECT_MAX_MS = 15000;
+const NATIVE_CHARACTER_FOOT_OFFSET = 2.0;
 
 function readId(value: unknown): number {
   if (!value || typeof value !== "object") return 0;
   return Number((value as { id?: unknown }).id || 0) || 0;
-}
-
-function readVector(value: VectorLike | null | undefined): VectorSnapshot | null {
-  if (!value) return null;
-  const x = Number(value.x);
-  const y = Number(value.y);
-  const z = Number(value.z);
-  return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null;
 }
