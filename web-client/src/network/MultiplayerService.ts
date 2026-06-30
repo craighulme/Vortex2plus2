@@ -63,13 +63,13 @@ export type MultiplayerMessageSummary = {
 
 export class MultiplayerService {
   private readonly messages: MultiplayerMessageSummary[] = [];
-  private readonly pendingEngineMessages: unknown[] = [];
+  private readonly pendingRuntimeExportMessages: unknown[] = [];
   private readonly names = new PlayerNameRegistry();
   private readonly friends = new FriendStatusRegistry();
   private readonly remoteDebug = new RemoteStateDebugTracker();
   private readonly broadcast = new BroadcastStateTracker();
   private reconnectAttempts = 0;
-  private flushingEngineMessages = false;
+  private flushingRuntimeExportMessages = false;
 
   recordMessage(message: unknown, enabled = true): void {
     if (!enabled || !message || typeof message !== "object") return;
@@ -92,30 +92,34 @@ export class MultiplayerService {
     return this.messages.map((message) => ({ ...message, ids: [...message.ids] }));
   }
 
-  queueUntilEngineReady(message: unknown, engineReady: boolean): boolean {
-    if (engineReady) return false;
+  queueUntilRuntimeExportsReady(message: unknown, runtimeExportsReady: boolean): boolean {
+    if (runtimeExportsReady) return false;
     if (message && typeof message === "object" && (message as { type?: unknown }).type === "kicked") return false;
-    this.pendingEngineMessages.push(message);
-    if (this.pendingEngineMessages.length > 200) {
-      this.pendingEngineMessages.splice(0, this.pendingEngineMessages.length - 200);
+    this.pendingRuntimeExportMessages.push(message);
+    if (this.pendingRuntimeExportMessages.length > 200) {
+      this.pendingRuntimeExportMessages.splice(0, this.pendingRuntimeExportMessages.length - 200);
     }
     return true;
   }
 
-  flushQueuedEngineMessages(engineReady: () => boolean, handleMessage: (message: unknown) => void): void {
-    if (this.flushingEngineMessages || !engineReady()) return;
-    this.flushingEngineMessages = true;
+  flushQueuedRuntimeExportMessages(runtimeExportsReady: () => boolean, handleMessage: (message: unknown) => void): void {
+    if (this.flushingRuntimeExportMessages || !runtimeExportsReady()) return;
+    this.flushingRuntimeExportMessages = true;
     try {
-      while (this.pendingEngineMessages.length && engineReady()) {
-        handleMessage(this.pendingEngineMessages.shift());
+      while (this.pendingRuntimeExportMessages.length && runtimeExportsReady()) {
+        handleMessage(this.pendingRuntimeExportMessages.shift());
       }
     } finally {
-      this.flushingEngineMessages = false;
+      this.flushingRuntimeExportMessages = false;
     }
   }
 
+  pendingRuntimeExportMessageCount(): number {
+    return this.pendingRuntimeExportMessages.length;
+  }
+
   pendingEngineMessageCount(): number {
-    return this.pendingEngineMessages.length;
+    return this.pendingRuntimeExportMessageCount();
   }
 
   isPlaceholderPlayerName(id: unknown, value: unknown): boolean {
@@ -303,7 +307,7 @@ export class MultiplayerService {
 
   reset(): void {
     this.messages.length = 0;
-    this.pendingEngineMessages.length = 0;
+    this.pendingRuntimeExportMessages.length = 0;
     this.names.clear();
     this.friends.clear();
     this.remoteDebug.clear();

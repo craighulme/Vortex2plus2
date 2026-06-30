@@ -1,16 +1,17 @@
 // @ts-nocheck
-import { DEFAULT_BODY_COLORS } from "../../avatar/AvatarService";
 import { createMultiplayerAccessBridge } from "./MultiplayerAccessBridge";
 import { resolveMultiplayerBridgeDependencies } from "./MultiplayerBridgeDependencies";
 import { createMultiplayerAvatarSpoofBridge } from "./MultiplayerAvatarSpoofBridge";
 import { createMultiplayerBubbleBridge } from "./MultiplayerBubbleBridge";
 import { createMultiplayerBroadcastBridge } from "./MultiplayerBroadcastBridge";
 import { createMultiplayerConnectionBridge } from "./MultiplayerConnectionBridge";
+import { createMultiplayerCoordinateBridge } from "./MultiplayerCoordinateBridge";
 import { installMultiplayerConsoleBridge } from "./MultiplayerConsoleBridge";
 import { installMultiplayerDebugConsole } from "./MultiplayerDebugConsoleBridge";
 import { installMultiplayerFrameBridge } from "./MultiplayerFrameBridge";
 import { createMultiplayerRemoteAvatarBridge } from "./MultiplayerRemoteAvatarBridge";
 import { createMultiplayerRemoteBridge } from "./MultiplayerRemoteBridge";
+import { createMultiplayerRuntimeServices } from "./MultiplayerRuntimeServices";
 import { handleMultiplayerBridgeMessage } from "./MultiplayerRouterBridgeContext";
 
 export class MultiplayerBridgeService {
@@ -43,50 +44,28 @@ export class MultiplayerBridgeService {
       _vortex,
       scene
     } = resolved.deps;
-    window.VortexRuntime = runtime;
+    const runtimeServices = runtime;
+    const services = createMultiplayerRuntimeServices(runtimeServices);
+    window.VortexRuntime = runtimeServices;
     this.mounted = true;
 
-    function _hasVortexEngine() {
+    function _hasRuntimeExports() {
         return !!window._vortex;
     }
     
-    function _queueUntilVortexEngine(message) {
-        return _runtimeMultiplayer().queueUntilEngineReady(message, _hasVortexEngine());
+    function _queueUntilRuntimeExports(message) {
+        return _runtimeMultiplayer().queueUntilRuntimeExportsReady(message, _hasRuntimeExports());
     }
     
-    function _flushPendingEngineMessages() {
-        _runtimeMultiplayer().flushQueuedEngineMessages(_hasVortexEngine, handle);
+    function _flushPendingRuntimeExportMessages() {
+        _runtimeMultiplayer().flushQueuedRuntimeExportMessages(_hasRuntimeExports, handle);
     }
     
-    window.addEventListener("vortex-engine-ready", _flushPendingEngineMessages);
-    window.addEventListener("vweb-runtime-ready", () => setTimeout(_flushPendingEngineMessages, 0));
-    
-    function _nativeFootOffset() {
-        const sceneOffset = Number(_vortex.getCharFootOffset?.());
-        return _runtimeMultiplayer().nativeFootOffset(Number.isFinite(sceneOffset) ? sceneOffset : undefined);
-    }
-    
-    function _sceneFootOffset() {
-        const offset = Number(_vortex.getCharFootOffset?.());
-        return Number.isFinite(offset) ? offset : _nativeFootOffset();
-    }
-    
-    function _nativeYToSceneY(y) {
-        return _runtimeMultiplayer().nativeYToSceneY(y, _nativeFootOffset(), _sceneFootOffset());
-    }
-    
-    function _sceneYToNativeY(y) {
-        return _runtimeMultiplayer().sceneYToNativeY(y, _nativeFootOffset(), _sceneFootOffset());
-    }
+    window.addEventListener("vortex-engine-ready", _flushPendingRuntimeExportMessages);
+    window.addEventListener("vweb-runtime-ready", () => setTimeout(_flushPendingRuntimeExportMessages, 0));
     
     function _normalizeAvatarFields(data = {}) {
-        return window.VortexRuntime?.avatar?.normalizeNative?.(data) || {
-            shirt_id: 0,
-            pant_id: 0,
-            body_type: "male",
-            body_colors: [...DEFAULT_BODY_COLORS],
-            face_id: 0
-        };
+        return services.normalizeAvatarFields(data);
     }
     
     let myId = null;
@@ -97,64 +76,63 @@ export class MultiplayerBridgeService {
     }
     
     function _runtimeMultiplayer() {
-        const service = window.VortexRuntime?.multiplayer;
-        if (!service) throw new Error("[mp] VortexRuntime multiplayer service is required.");
-        return service;
+        return services.multiplayer();
     }
     
     function _runtimeSession() {
-        const service = window.VortexRuntime?.multiplayerSession;
-        if (!service) throw new Error("[mp] VortexRuntime multiplayer session service is required.");
-        return service;
+        return services.session();
     }
     
     function _runtimeConnection() {
-        const service = window.VortexRuntime?.multiplayerConnection;
-        if (!service) throw new Error("[mp] VortexRuntime multiplayer connection service is required.");
-        return service;
+        return services.connection();
     }
     
     function _runtimeRouter() {
-        const service = window.VortexRuntime?.multiplayerRouter;
-        if (!service) throw new Error("[mp] VortexRuntime multiplayer message router is required.");
-        return service;
+        return services.router();
     }
     
     function _runtimeRemoteSession() {
-        const service = window.VortexRuntime?.remoteSession;
-        if (!service) throw new Error("[mp] VortexRuntime remote session service is required.");
-        return service;
+        return services.remoteSession();
     }
     
     function _runtimeAccess() {
-        const service = window.VortexRuntime?.access;
-        if (!service) throw new Error("[mp] VortexRuntime access service is required.");
-        return service;
+        return services.access();
     }
 
     function _runtimeCommunity() {
-        return window.VortexRuntime?.community || null;
+        return services.community();
     }
     
     function _leaderboard() {
-        return window.VortexRuntime?.leaderboard?.api?.() || window.Leaderboard;
+        return services.leaderboard();
     }
-    
-    window._vortexRemotes = _runtimeRemoteSession().remotes;
+    const coordinateBridge = createMultiplayerCoordinateBridge({
+        vortex: _vortex,
+        runtimeMultiplayer: _runtimeMultiplayer
+    });
+
+    const {
+        nativeFootOffset: _nativeFootOffset,
+        sceneFootOffset: _sceneFootOffset,
+        nativeYToSceneY: _nativeYToSceneY,
+        sceneYToNativeY: _sceneYToNativeY
+    } = coordinateBridge;
 
     const bubbleBridge = createMultiplayerBubbleBridge({
         THREE,
         document,
         window,
         vortex: _vortex,
+        chatBubbles: runtimeServices.chatBubbles,
         runtimeRemoteSession: _runtimeRemoteSession
     });
 
     const remoteAvatarBridge = createMultiplayerRemoteAvatarBridge({
         THREE,
         document,
-        window,
-        vortex: _vortex
+        vortex: _vortex,
+        remotePlayers: runtimeServices.remotePlayers,
+        animation: runtimeServices.animation
     });
     
     function _playerDisplayName(id, username) {
@@ -195,9 +173,7 @@ export class MultiplayerBridgeService {
     }
     
     function getBridgeConfig() {
-        const config = window.VortexRuntime?.platform?.bridgeConfig;
-        if (!config) throw new Error("[mp] VortexRuntime platform bridge config is required.");
-        return config;
+        return services.bridgeConfig();
     }
 
     let connectionBridge = null;
@@ -209,9 +185,7 @@ export class MultiplayerBridgeService {
     let _skipNextRemoteAvatarRebuild = false;
     
     function _runtimePacketDebug() {
-        const service = window.VortexRuntime?.packetDebug;
-        if (!service) throw new Error("[mp] VortexRuntime packet debug service is required.");
-        return service;
+        return services.packetDebug();
     }
     
     function _recordReplicatedPlayers(source, players) {
@@ -298,6 +272,7 @@ export class MultiplayerBridgeService {
         Chat,
         console,
         runtimeSession: _runtimeSession,
+        runtimeMultiplayer: _runtimeMultiplayer,
         runtimeConnection: _runtimeConnection,
         runtimeRemoteSession: _runtimeRemoteSession,
         getBridgeConfig,
@@ -309,7 +284,7 @@ export class MultiplayerBridgeService {
         getFallbackGameId: () => window.GAME_ID || 0,
         handleMessage: handle,
         scheduleReconnect: _scheduleReconnect,
-        protocol: () => window.VortexRuntime.protocol,
+        protocol: () => runtimeServices.protocol,
         avatarSpoof,
         accessBridge
     });
@@ -326,6 +301,7 @@ export class MultiplayerBridgeService {
     installMultiplayerDebugConsole({
         window,
         console,
+        runtime: runtimeServices,
         setTimeout,
         setInterval,
         clearInterval,
@@ -382,7 +358,7 @@ export class MultiplayerBridgeService {
             window,
             Chat,
             vortex: _vortex,
-            queueUntilEngine: _queueUntilVortexEngine,
+            queueUntilRuntimeExports: _queueUntilRuntimeExports,
             runtimeRouter: _runtimeRouter,
             runtimeSession: _runtimeSession,
             runtimeRemoteSession: _runtimeRemoteSession,
@@ -430,6 +406,13 @@ export class MultiplayerBridgeService {
         window,
         fetch,
         Chat,
+        chatCommands: runtimeServices.chatCommands,
+        avatar: runtimeServices.avatar,
+        avatarAssets: runtimeServices.avatarAssets,
+        avatarMaterials: runtimeServices.avatarMaterials,
+        remotePlayers: runtimeServices.remotePlayers,
+        remoteSession: runtimeServices.remoteSession,
+        packetDebug: runtimeServices.packetDebug,
         vortex: _vortex,
         runtimeRemoteSession: _runtimeRemoteSession,
         normalizeAvatarFields: _normalizeAvatarFields,
@@ -447,7 +430,7 @@ export class MultiplayerBridgeService {
             }
         }
     });
-    window.VortexRuntime.chat?.configureOutbound?.({
+    runtimeServices.chat?.configureOutbound?.({
         handleCommand: consoleBridge.handleChatCommand,
         sendMessage: (msg) => bridgeSend({ type: "chat", msg })
     });

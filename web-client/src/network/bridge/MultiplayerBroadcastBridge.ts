@@ -49,7 +49,7 @@ export function createMultiplayerBroadcastBridge(context) {
 
   function stop() {
     runtimeSession().stopBroadcast(clearInterval);
-    window.VortexRuntime?.multiplayer?.resetLocalBroadcast?.();
+    runtimeMultiplayer().resetLocalBroadcast?.();
   }
 
   return { start, stop };

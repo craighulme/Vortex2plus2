@@ -50,7 +50,7 @@ export class WorldBootstrapService {
   boot(runtime: RuntimeWorldBootstrap, fetcher: typeof fetch = this.windowRef.fetch.bind(this.windowRef), attempt = 0): void {
     if (this.windowRef.__vwebMapLoaderBooted) return;
     if (!this.ready(runtime)) {
-      if (attempt === 0) console.info("waiting for Vortex engine before map loader");
+      if (attempt === 0) console.info("waiting for Vortex runtime exports before map loader");
       if (attempt > 200) {
         console.warn("map loader could not start: Vortex runtime world handles were not ready");
         return;

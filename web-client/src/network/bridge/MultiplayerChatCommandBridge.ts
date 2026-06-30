@@ -4,6 +4,7 @@ export function createMultiplayerChatCommandBridge(context) {
   const {
     window,
     Chat,
+    chatCommands,
     vortex,
     runtimeRemoteSession,
     requireLicenseFeature,
@@ -44,7 +45,7 @@ export function createMultiplayerChatCommandBridge(context) {
   }
 
   function handleChatCommand(text) {
-    return window.VortexRuntime.chatCommands.handle(text, {
+    return chatCommands.handle(text, {
       chat: Chat,
       players: commandPlayerList,
       localPosition: () => vortex.getCharacter?.()?.position || null,

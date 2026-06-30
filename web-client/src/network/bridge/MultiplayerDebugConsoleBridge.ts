@@ -4,6 +4,7 @@ export function installMultiplayerDebugConsole(context) {
   const {
     window,
     console,
+    runtime,
     setTimeout,
     setInterval,
     clearInterval,
@@ -73,7 +74,6 @@ export function installMultiplayerDebugConsole(context) {
     heights() {
       assertPacketDebugAccess();
       const rows = remoteDebugRows();
-      const runtime = window.VortexRuntime;
       const footOffset = Number(runtime?._vortex?.get?.()?.getCharFootOffset?.() ?? runtime?.vortex?.get?.()?.getCharFootOffset?.() ?? 2);
       const colliders = runtime?.worldColliders;
       const renderRows = runtime?.remotePlayers?.profile?.(runtime?.remoteSession?.remotes)?.rows || [];
@@ -111,7 +111,6 @@ export function installMultiplayerDebugConsole(context) {
     },
     renderCost() {
       assertPacketDebugAccess();
-      const runtime = window.VortexRuntime;
       const camera = runtime?.renderer?.getHandles?.()?.camera?.position || null;
       runtime?.remotePlayers?.updateRenderBudget?.(runtime?.remoteSession?.remotes, camera);
       const profile = runtime?.remotePlayers?.profile?.(runtime?.remoteSession?.remotes);
@@ -129,7 +128,6 @@ export function installMultiplayerDebugConsole(context) {
     },
     offsets() {
       assertPacketDebugAccess();
-      const runtime = window.VortexRuntime;
       const vortex = runtime?.vortex?.get?.();
       const values = {
         nativeFootOffset: roundNumber(typeof nativeFootOffset === "function" ? nativeFootOffset() : null),
@@ -154,7 +152,6 @@ export function installMultiplayerDebugConsole(context) {
     },
     ground(id) {
       assertPacketDebugAccess();
-      const runtime = window.VortexRuntime;
       const rows = remoteDebugRows();
       const row = rows.find((item) => Number(item.id) === Number(id)) || rows[0];
       if (!row?.target) return null;

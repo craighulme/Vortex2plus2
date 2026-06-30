@@ -28,7 +28,7 @@ export function resolveMultiplayerBridgeDependencies(windowRef: Window, document
   const Chat = window.Chat;
   const _vortex = window._vortex;
 
-  if (!_vortex) return { ok: false, reason: "Vortex engine bridge is not ready" };
+  if (!_vortex) return { ok: false, reason: "Vortex runtime exports are not ready" };
   if (!THREE) return { ok: false, reason: "THREE is not ready" };
   if (!Chat) return { ok: false, reason: "chat service is not ready" };
 

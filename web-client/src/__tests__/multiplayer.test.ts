@@ -54,23 +54,23 @@ describe("MultiplayerService", () => {
     ]);
   });
 
-  it("queues relay messages until the engine is ready", () => {
+  it("queues relay messages until runtime exports are ready", () => {
     const multiplayer = new MultiplayerService();
     const handled: unknown[] = [];
     let ready = false;
 
-    expect(multiplayer.queueUntilEngineReady({ type: "init" }, ready)).toBe(true);
-    expect(multiplayer.queueUntilEngineReady({ type: "kicked" }, ready)).toBe(false);
-    expect(multiplayer.pendingEngineMessageCount()).toBe(1);
+    expect(multiplayer.queueUntilRuntimeExportsReady({ type: "init" }, ready)).toBe(true);
+    expect(multiplayer.queueUntilRuntimeExportsReady({ type: "kicked" }, ready)).toBe(false);
+    expect(multiplayer.pendingRuntimeExportMessageCount()).toBe(1);
 
-    multiplayer.flushQueuedEngineMessages(() => ready, (message) => handled.push(message));
+    multiplayer.flushQueuedRuntimeExportMessages(() => ready, (message) => handled.push(message));
     expect(handled).toEqual([]);
 
     ready = true;
-    multiplayer.flushQueuedEngineMessages(() => ready, (message) => handled.push(message));
+    multiplayer.flushQueuedRuntimeExportMessages(() => ready, (message) => handled.push(message));
     expect(handled).toEqual([{ type: "init" }]);
-    expect(multiplayer.pendingEngineMessageCount()).toBe(0);
-    expect(multiplayer.queueUntilEngineReady({ type: "states" }, ready)).toBe(false);
+    expect(multiplayer.pendingRuntimeExportMessageCount()).toBe(0);
+    expect(multiplayer.queueUntilRuntimeExportsReady({ type: "states" }, ready)).toBe(false);
   });
 
   it("validates and converts remote scene positions", () => {

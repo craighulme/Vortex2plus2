@@ -6,13 +6,13 @@ export function createMultiplayerBubbleBridge(context) {
     document,
     window,
     vortex,
+    chatBubbles,
     runtimeRemoteSession
   } = context;
 
   function service() {
-    const bubbleService = window.VortexRuntime?.chatBubbles;
-    if (!bubbleService) throw new Error("[mp] VortexRuntime chat bubble service is required.");
-    return bubbleService.configure({ THREE, document, window, scene: vortex.scene });
+    if (!chatBubbles) throw new Error("[mp] VortexRuntime chat bubble service is required.");
+    return chatBubbles.configure({ THREE, document, window, scene: vortex.scene });
   }
 
   function show(id, text) {
@@ -30,11 +30,11 @@ export function createMultiplayerBubbleBridge(context) {
   }
 
   function clear(id) {
-    window.VortexRuntime?.chatBubbles?.clearPlayer?.(id);
+    chatBubbles?.clearPlayer?.(id);
   }
 
   function hasBubbles() {
-    return !!window.VortexRuntime?.chatBubbles?.hasBubbles?.();
+    return !!chatBubbles?.hasBubbles?.();
   }
 
   return {

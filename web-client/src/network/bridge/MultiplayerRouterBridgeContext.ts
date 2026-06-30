@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 export function handleMultiplayerBridgeMessage(d, ctx) {
-  if (ctx.queueUntilEngine(d)) return;
+  if (ctx.queueUntilRuntimeExports(d)) return;
   ctx.remoteBridge.recordMultiplayerMessage(d);
   ctx.runtimeRouter().handle(d, {
     selfId: ctx.getSelfId,

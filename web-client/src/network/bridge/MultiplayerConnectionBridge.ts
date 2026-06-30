@@ -9,6 +9,7 @@ export function createMultiplayerConnectionBridge(context) {
     Chat,
     console,
     runtimeSession,
+    runtimeMultiplayer,
     runtimeConnection,
     runtimeRemoteSession,
     getBridgeConfig,
@@ -50,7 +51,7 @@ export function createMultiplayerConnectionBridge(context) {
   }
 
   function isOpen() {
-    return window.VortexRuntime.multiplayer.isSocketOpen(runtimeSession().socket);
+    return runtimeMultiplayer().isSocketOpen(runtimeSession().socket);
   }
 
   function contextForConnection() {
@@ -91,6 +92,6 @@ export function createMultiplayerConnectionBridge(context) {
     isOpen,
     connect,
     connectOnce,
-    encodeNetworkData: (data) => window.VortexRuntime.multiplayer.encodeNetworkData(data)
+    encodeNetworkData: (data) => runtimeMultiplayer().encodeNetworkData(data)
   };
 }

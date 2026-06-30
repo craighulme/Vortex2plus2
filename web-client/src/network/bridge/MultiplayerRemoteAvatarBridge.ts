@@ -4,12 +4,12 @@ export function createMultiplayerRemoteAvatarBridge(context) {
   const {
     THREE,
     document,
-    window,
-    vortex
+    vortex,
+    remotePlayers,
+    animation
   } = context;
 
   function service() {
-    const remotePlayers = window.VortexRuntime?.remotePlayers;
     if (!remotePlayers) throw new Error("[mp] VortexRuntime remote player service is required.");
     return remotePlayers.configure({ THREE, document, vortex });
   }
@@ -27,7 +27,7 @@ export function createMultiplayerRemoteAvatarBridge(context) {
   }
 
   function animate(id, remote, dt) {
-    window.VortexRuntime?.animation?.animateRuntimeRemote?.(remote, dt);
+    animation?.animateRuntimeRemote?.(remote, dt);
   }
 
   return {

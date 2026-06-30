@@ -6,6 +6,13 @@ export function installMultiplayerConsoleBridge(context) {
     window,
     fetch,
     Chat,
+    chatCommands,
+    avatar,
+    avatarAssets,
+    avatarMaterials,
+    remotePlayers,
+    remoteSession,
+    packetDebug,
     vortex,
     runtimeRemoteSession,
     normalizeAvatarFields,
@@ -19,6 +26,7 @@ export function installMultiplayerConsoleBridge(context) {
   const commandBridge = createMultiplayerChatCommandBridge({
     window,
     Chat,
+    chatCommands,
     vortex,
     runtimeRemoteSession,
     requireLicenseFeature,
@@ -26,13 +34,13 @@ export function installMultiplayerConsoleBridge(context) {
     getLocalPlayerId
   });
 
-  window.VortexMovement = window.VortexRuntime.chatCommands.createMovementApi({
+  window.VortexMovement = chatCommands.createMovementApi({
     movementMods: commandBridge.movementMods,
     setMovementMods: commandBridge.setMovementMods,
     assertFeature: assertLicenseFeature,
   });
 
-  window.VortexAvatar = window.VortexRuntime.avatar.createConsoleApi({
+  window.VortexAvatar = avatar.createConsoleApi({
     async persistOutfit(normalized) {
       const res = await fetch("/api/clothing/outfit", {
         method: "PUT",
@@ -56,9 +64,9 @@ export function installMultiplayerConsoleBridge(context) {
   window.VortexAvatarDiagnostics = {
     snapshot() {
       return {
-        assets: window.VortexRuntime.avatarAssets?.snapshot?.() || null,
-        materials: window.VortexRuntime.avatarMaterials?.snapshot?.() || null,
-        remoteRender: window.VortexRuntime.remotePlayers?.renderCostSnapshot?.(window.VortexRuntime.remoteSession?.remotes) || null,
+        assets: avatarAssets?.snapshot?.() || null,
+        materials: avatarMaterials?.snapshot?.() || null,
+        remoteRender: remotePlayers?.renderCostSnapshot?.(remoteSession?.remotes) || null,
         remotes: remoteAvatarRows()
       };
     },
@@ -83,15 +91,15 @@ export function installMultiplayerConsoleBridge(context) {
       return snapshot;
     },
     clear() {
-      window.VortexRuntime.avatarAssets?.clearDiagnostics?.();
-      window.VortexRuntime.avatarMaterials?.clearDiagnostics?.();
+      avatarAssets?.clearDiagnostics?.();
+      avatarMaterials?.clearDiagnostics?.();
       return true;
     }
   };
 
   function remoteAvatarRows() {
-    const materialDiagnostics = window.VortexRuntime.avatarMaterials?.snapshot?.().diagnostics || [];
-    const packetPlayers = new Map((window.VortexRuntime.packetDebug?.players?.() || []).map((player) => [Number(player.id), player]));
+    const materialDiagnostics = avatarMaterials?.snapshot?.().diagnostics || [];
+    const packetPlayers = new Map((packetDebug?.players?.() || []).map((player) => [Number(player.id), player]));
     return [...runtimeRemoteSession().remotes.entries()].map(([id, remote]) => {
       const playerId = Number(id);
       const avatar = normalizeAvatarFields(remote.avatar || {});
