@@ -1,6 +1,6 @@
 {
   "name": "Vortex Web",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "manifest_version": 3,
   "description": "Unofficial Vortex browser client with native multiplayer relay support, WebGPU work, and web-first enhancements.",
   "icons": {

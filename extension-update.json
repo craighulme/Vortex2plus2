@@ -1,16 +1,16 @@
 {
-  "version": "0.5.0",
-  "date": "2026-06-28",
+  "version": "0.6.0",
+  "date": "2026-06-30",
   "url": "https://github.com/craighulme/Vortex-Web",
-  "title": "Vortex Web runtime migration",
-  "summary": "This release moves Vortex Web onto the new runtime foundation with WebGPU rendering work, improved shadows, cleaner architecture, and a large step away from the old 2+2 override files.",
+  "title": "Vortex Web runtime and theme update",
+  "summary": "This update continues the move away from the old 2+2 layout and into the new Vortex Web runtime, with cleaner runtime bridges, WebGPU work, better settings, and early theme/profile customisation support.",
   "changelog": [
-    "Moved the game client toward a single bundled Vortex Web runtime instead of order-dependent override scripts.",
-    "Added the new WebGPU renderer path with older renderer code being phased out.",
-    "Reworked shadows with quality presets and better runtime control.",
-    "Ported major engine, world, input, audio, HUD, avatar, and multiplayer systems into typed web-client services.",
-    "Improved profile cosmetics, badges, name effects, nameplates, and leaderboard styling.",
-    "Removed legacy 2+2-only gameplay pieces from the core direction and prepared the runtime for future streamed assets, equipment, physics, and scripting APIs.",
-    "Packets updated to support new multiplayer relay features and future gameplay systems."
+    "Moved more of the browser client into the bundled Vortex Web runtime and cleaned up old runtime bridge naming.",
+    "Continued the WebGPU renderer migration with runtime quality controls, shadow settings, fog controls, and render distance options.",
+    "Added and improved in-game settings, keybind controls, dev tools, and cleaner HUD styling.",
+    "Added early site and in-game theme editing support, including runtime theme presets and live custom CSS work.",
+    "Improved profile customisation support with badges, name gradients, nameplates, and leaderboard cosmetic rendering.",
+    "Refactored multiplayer bridge services so relay, runtime exports, coordinate conversion, debug tools, chat, and remote players are better separated.",
+    "Kept moving legacy 2+2-only code out of the core direction while preparing for streamed assets, equipment, physics, and scripting APIs."
   ]
 }
