@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as THRE from "../../public/vendor/three.webgpu.js";
 import * as BufferGeometryUtils from "../../public/vendor/BufferGeometryUtils.js";
 import { GLTFLoader } from "../../public/vendor/GLTFLoader.js";
@@ -16,7 +15,17 @@ const THREE = {
     BufferGeometryUtils: VortexBufferGeometryUtils,
 };
 
+type RuntimeWindow = Window & {
+    _importedAssets?: { content?: unknown };
+    VortexChunkDebug?: unknown;
+    G?: number;
+    locked?: boolean;
+};
+
+type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
 export async function launchRuntime(VortexRuntime: VortexRuntime): Promise<void> {
+const runtimeWindow = window as RuntimeWindow;
 const STUDS_PER_TILE = 4;
 const scene = new THREE.Scene();
 
@@ -36,7 +45,7 @@ if (!runtimeRendererService) {
 }
 
 const sceneRuntime = await VortexRuntime.sceneSetup.configure({
-    windowRef: window,
+    windowRef: runtimeWindow,
     document,
     localStorage,
     THREE,
@@ -74,7 +83,7 @@ const worldRuntime = VortexRuntime.worldBridge.configure({
     windowRef: window,
     assets: runtimeAssets,
     assetResolver: VortexRuntime.assetResolver,
-    fallbackAssetRaw: window._importedAssets?.content,
+    fallbackAssetRaw: runtimeWindow._importedAssets?.content == null ? null : String(runtimeWindow._importedAssets.content),
     worldRuntime: VortexRuntime.worldRuntime,
     textures: VortexRuntime.textures,
     geometry: VortexRuntime.worldGeometry,
@@ -94,13 +103,13 @@ const worldRuntimeHandles = worldRuntime.worldRuntime;
 const runtimeAsset = worldRuntime.runtimeAsset;
 applyStoredRenderDistance(VortexRuntime.world, localStorage);
 const chunkDebug = createChunkDebugController(THREE, scene, VortexRuntime.world);
-window.VortexChunkDebug = chunkDebug.api;
+runtimeWindow.VortexChunkDebug = chunkDebug.api;
 
 const WORLD_FLOOR_Y = 1.5;
 const G = WORLD_FLOOR_Y;
-window.G = G;
+runtimeWindow.G = G;
 
-window.locked = false;
+runtimeWindow.locked = false;
 
 const anim = { time: 0, bones: {}, rest: {} };
 
@@ -109,7 +118,7 @@ const avatarRuntime = VortexRuntime.avatarSetup.configure({
     THREE,
     scene,
     document,
-    windowRef: window,
+    windowRef: runtimeWindow as Window & Record<string, unknown>,
     loader: gltfLoader,
     avatarService: VortexRuntime.avatar,
     avatarAssets: VortexRuntime.avatarAssets,
@@ -121,9 +130,9 @@ const avatarRuntime = VortexRuntime.avatarSetup.configure({
     animation: anim,
     isWebGpuRuntime,
     floorY: G,
-    resolveAsset: (bodyType) => bodyType === "female"
+    resolveAsset: (bodyType) => String(bodyType === "female"
         ? runtimeAsset("meshes.femalePlayerGlb", "femalePlayerGlb")
-        : runtimeAsset("meshes.malePlayerGlb", "malePlayerGlb"),
+        : runtimeAsset("meshes.malePlayerGlb", "malePlayerGlb")),
     shadowsActive,
     markShadowsDirty: () => shadows.markNeedsUpdate(),
 });
@@ -141,10 +150,10 @@ function toggleDebug() {
     worldRuntime.toggleDebug(characterMetrics());
 }
 
-let hudRuntime = null;
+let hudRuntime: any = null;
 let isFirstPerson = false;
 
-function setMouseLock(sl) {
+function setMouseLock(sl: unknown) {
     hudRuntime?.setMouseLock(!!sl);
 }
 
@@ -155,7 +164,7 @@ const localPlayerRuntime = VortexRuntime.localPlayerSetup.configure({
     animationState: anim,
     characterSpawn,
     localAvatar,
-    windowRef: window,
+    windowRef: runtimeWindow as Window & Record<string, unknown>,
     getCharacter,
     getNearbyColliders: worldRuntime.getNearbyColliders,
     getMetrics: characterMetrics,
@@ -205,7 +214,7 @@ hudRuntime = VortexRuntime.hudSetup.configure({
 });
 
 VortexRuntime.runtimeStartup.install({
-    windowRef: window,
+    windowRef: runtimeWindow as Window & Record<string, unknown>,
     localStorage,
     three: THREE,
     scene,
@@ -268,7 +277,7 @@ VortexRuntime.runtimeStartup.install({
 });
 }
 
-function applyStoredRenderDistance(worldService, storage) {
+function applyStoredRenderDistance(worldService: any, storage: StorageLike) {
     const distance = Number(storage.getItem("vwebRenderDistance"));
     if (!Number.isFinite(distance)) return;
     const rawProfile = storage.getItem("vwebRenderDistanceProfile");
@@ -276,8 +285,8 @@ function applyStoredRenderDistance(worldService, storage) {
     worldService.setRenderDistance?.(distance, profile);
 }
 
-function createChunkDebugController(THREE, scene, worldService) {
-    const helpers = new Map();
+function createChunkDebugController(THREE: any, scene: any, worldService: any) {
+    const helpers = new Map<string, any>();
     let visible = false;
 
     function rows() {
@@ -297,7 +306,7 @@ function createChunkDebugController(THREE, scene, worldService) {
         helpers.clear();
     }
 
-    function makeHelper(row) {
+    function makeHelper(row: any) {
         if (!row?.min || !row?.max) return null;
         const box = new THREE.Box3(
             new THREE.Vector3(row.min.x, row.min.y, row.min.z),
@@ -317,7 +326,7 @@ function createChunkDebugController(THREE, scene, worldService) {
     function update() {
         if (!visible) return;
         const nextRows = rows();
-        const nextIds = new Set(nextRows.map((row) => row.id));
+        const nextIds = new Set(nextRows.map((row: any) => row.id));
         for (const [id, helper] of helpers) {
             if (nextIds.has(id)) continue;
             scene.remove(helper);
@@ -355,7 +364,7 @@ function createChunkDebugController(THREE, scene, worldService) {
         },
         rows() {
             const data = rows();
-            console.table(data.map((row) => ({
+            console.table(data.map((row: any) => ({
                 chunk: row.chunkKey,
                 visible: row.visible,
                 objects: row.objects,
@@ -367,17 +376,17 @@ function createChunkDebugController(THREE, scene, worldService) {
             return data;
         },
         snapshot,
-        setDistance(value) {
+        setDistance(value: unknown) {
             const result = worldService.setRenderDistance?.(Number(value), "balanced") || worldService.setRenderChunkCullDistance?.(Number(value));
             update();
             return result || snapshot();
         },
-        setNear(value) {
+        setNear(value: unknown) {
             const result = worldService.setRenderChunkMinimumVisibleDistance?.(Number(value));
             update();
             return { ...snapshot(), minimumVisibleDistance: result };
         },
-        setViewCulling(value) {
+        setViewCulling(value: unknown) {
             worldService.setRenderChunkViewCullingEnabled?.(!!value);
             update();
             return snapshot();

@@ -1,64 +1,141 @@
-// @ts-nocheck
 import { readRuntimeDisplaySettings } from "./RuntimeDisplaySettings";
 import { matchesKeybind } from "../input/KeybindSettings";
+import {
+  BOOST_ICON,
+  FRIEND_ICON,
+  MOD_ICON,
+  STAFF_ICON,
+  badgeDescription,
+  badgeIcon,
+  cssUrl,
+  escapeAttr,
+  escapeHtml
+} from "./leaderboard/LeaderboardBadges";
+import {
+  COSMETICS_RETRY_MS,
+  COSMETICS_TTL_MS,
+  type LeaderboardCosmeticsRecord,
+  cosmeticsFor as readCosmeticsFor,
+  isVideoUrl,
+  playerPanelBackgroundUrl,
+  readCommunityApiBase,
+  readLeaderboardCosmeticsCache,
+  writeLeaderboardCosmeticsCache
+} from "./leaderboard/LeaderboardCosmeticsCache";
+import { type MediaTone, estimateMediaTone } from "./leaderboard/LeaderboardMediaTone";
+
+type LeaderboardColumn = { key: string; label: string };
+type LeaderboardPlayer = {
+  id: number;
+  username: string;
+  is_staff?: boolean;
+  is_moderator?: boolean;
+  is_booster?: boolean;
+  [key: string]: unknown;
+};
+type FriendStatus = "none" | "friends" | "request_sent" | "request_received" | string;
+type FollowStatus = "following" | "not_following" | string;
+type PlatformProfile = {
+  id: number;
+  username?: string;
+  bio?: string;
+  createdAt?: string;
+  followers?: number | null;
+  following?: number | null;
+  isStaff?: boolean;
+  isModerator?: boolean;
+  isBooster?: boolean;
+};
+type LeaderboardApi = {
+  setMyId(id: number): void;
+  setColumns(cols: LeaderboardColumn[]): void;
+  setPlayers(list: LeaderboardPlayer[]): void;
+  addPlayer(player: LeaderboardPlayer): void;
+  removePlayer(id: number): void;
+  updateStat(id: number, key: string, value: unknown): void;
+  batchUpdateStat(updates: Array<{ id: number; key: string; value: unknown }>): void;
+  setFriendStatuses(map: Record<string, FriendStatus>): void;
+  setFriendStatus(id: number, status: FriendStatus): void;
+  setFollowStatus(id: number, status: FollowStatus): void;
+  getPlayer(id: number): LeaderboardPlayer | null;
+  getPlayers(): LeaderboardPlayer[];
+  selectPlayer(playerId: number): void;
+  closeFriendPanel(): void;
+  show(): void;
+  hide(): void;
+};
+type LeaderboardWindow = Window & {
+  Leaderboard?: LeaderboardApi;
+  _mpSetFriendStatus?: (id: number, status: FriendStatus) => void;
+  Notifications?: {
+    friendAccepted?: (username?: string | null) => void;
+  };
+};
+type RuntimeLike = {
+  leaderboard: { adopt(api: LeaderboardApi): void };
+  community?: {
+    onVortexUserProfile?: (handler: (profile: PlatformProfile) => void) => void;
+    prefetchVortexUsers?: (ids: number[]) => void;
+    getVortexUser?: (id: number) => PlatformProfile | null | undefined;
+    requestVortexUser?: (id: number, options?: { priority?: boolean }) => Promise<PlatformProfile | null | undefined>;
+  };
+};
+type PendingCosmeticsRequest = {
+  resolve: (records: Record<string, LeaderboardCosmeticsRecord>) => void;
+  timer: number;
+};
 
 export class LeaderboardDomService {
-  mount(runtime) {
-  if (window.Leaderboard) {
-    runtime.leaderboard.adopt(window.Leaderboard);
+  mount(runtime: RuntimeLike) {
+  const windowRef = window as LeaderboardWindow;
+  if (windowRef.Leaderboard) {
+    runtime.leaderboard.adopt(windowRef.Leaderboard);
     return;
   }
-  const leaderboardRoot = document.getElementById("leaderboard");
-  const leaderboardBody = document.getElementById("lb-body");
-  const leaderboardHeaders = document.getElementById("lb-col-headers");
+  const leaderboardRoot = document.getElementById("leaderboard") as HTMLElement;
+  const leaderboardBody = document.getElementById("lb-body") as HTMLElement;
+  const leaderboardHeaders = document.getElementById("lb-col-headers") as HTMLElement;
 
-  const playerPanel = document.getElementById("lb-player-panel");
-  const playerNameElem = document.getElementById("lbp-name");
-  const playerFollowBtn = document.getElementById("lbp-follow-btn");
-  const playerFriendBtn = document.getElementById("lbp-action-btn");
-  const playerProfileLink = document.getElementById("lbp-profile-link");
+  const playerPanel = document.getElementById("lb-player-panel") as HTMLElement;
+  const playerNameElem = document.getElementById("lbp-name") as HTMLElement;
+  const playerFollowBtn = document.getElementById("lbp-follow-btn") as HTMLButtonElement;
+  const playerFriendBtn = document.getElementById("lbp-action-btn") as HTMLButtonElement;
+  const playerProfileLink = document.getElementById("lbp-profile-link") as HTMLAnchorElement;
   const playerMetaElem = ensurePlayerMetaElement(playerPanel, document);
+  if (!leaderboardRoot || !leaderboardBody || !leaderboardHeaders || !playerPanel || !playerNameElem || !playerFollowBtn || !playerFriendBtn || !playerProfileLink) return;
 
-  let myPlayerId = null;
-  let columns = [];
-  let players = [];
+  let myPlayerId: number | null = null;
+  let columns: LeaderboardColumn[] = [];
+  let players: LeaderboardPlayer[] = [];
   let leaderboardVisible = true;
 
-  let selectedPlayerId = null;
-  let friendStatusMap = {};
-  let followStatusMap = {};
-  const platformProfiles = new Map();
+  let selectedPlayerId: number | null = null;
+  let friendStatusMap: Record<string, FriendStatus> = {};
+  let followStatusMap: Record<string, FollowStatus> = {};
+  const platformProfiles = new Map<number, PlatformProfile>();
 
-  const FRIEND_ICON = '<i class="fa-solid fa-user lb-friend-icon"></i>';
-  const STAFF_ICON = '<i class="fa-solid fa-shield-halved lb-staff-icon"></i>';
-  const MOD_ICON = '<i class="fa-solid fa-gavel lb-mod-icon"></i>';
-  const BOOST_ICON =
-    '<svg class="lb-boost-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path fill="#FF4DA5" d="M12.4801 1.42383C12.202 1.19206 11.798 1.19206 11.5199 1.42383L5.51986 6.42383C5.34887 6.56633 5.25 6.77742 5.25 7V17C5.25 17.2226 5.34887 17.4337 5.51986 17.5762L11.5199 22.5762C11.798 22.8079 12.202 22.8079 12.4801 22.5762L18.4801 17.5762C18.6511 17.4337 18.75 17.2226 18.75 17V7C18.75 6.77742 18.6511 6.56633 18.4801 6.42383L12.4801 1.42383Z"/><path fill="#ECEFF1" fill-rule="evenodd" d="M11.4932 5.44713C11.7799 5.18429 12.2201 5.18429 12.5068 5.44713L15.5068 8.19713C15.6618 8.33919 15.75 8.53977 15.75 8.75V15.25C15.75 15.4602 15.6618 15.6608 15.5068 15.8029L12.5068 18.5529C12.2201 18.8157 11.7799 18.8157 11.4932 18.5529L8.49321 15.8029C8.33823 15.6608 8.25 15.4602 8.25 15.25V8.75C8.25 8.53977 8.33823 8.33919 8.49321 8.19713L11.4932 5.44713ZM9.75 9.07993V14.9201L12 16.9826L14.25 14.9201V9.07993L12 7.01743L9.75 9.07993Z" clip-rule="evenodd"/><path fill="#E54594" fill-rule="evenodd" d="M12 1.25V22.75C11.8295 22.75 11.6589 22.6921 11.5199 22.5762L5.51986 17.5762C5.34887 17.4337 5.25 17.2226 5.25 17V7C5.25 6.77742 5.34887 6.56633 5.51986 6.42383L11.5199 1.42383C11.6589 1.30794 11.8295 1.25 12 1.25Z" clip-rule="evenodd"/><path fill="#D4D6D8" fill-rule="evenodd" d="M12 5.25C11.8183 5.25 11.6366 5.31571 11.4932 5.44713L8.49321 8.19713C8.33823 8.33919 8.25 8.53977 8.25 8.75V15.25C8.25 15.4602 8.33823 15.6608 8.49321 15.8029L11.4932 18.5529C11.6366 18.6843 11.8183 18.75 12 18.75V16.9826L9.75 14.9201V9.07993L12 7.01743V5.25Z" clip-rule="evenodd"/></svg>';
-  const COSMETICS_PAGE_CACHE_KEY = "vortexWebCosmeticsLeaderboard";
-  const COSMETICS_TTL_MS = 10 * 60 * 1000;
-  const COSMETICS_RETRY_MS = 30 * 1000;
-  const cosmetics = readCosmetics();
+  const cosmetics = readLeaderboardCosmeticsCache(localStorage, document);
   const displaySettings = readRuntimeDisplaySettings(document);
-  const communityApiBase = readCommunityApiBase();
+  const communityApiBase = readCommunityApiBase(document);
   let cosmeticsRequestKey = "";
   let cosmeticsRequestAt = 0;
-  const cosmeticsBridgeRequests = new Map();
-  const panelMediaToneCache = new Map();
+  const cosmeticsBridgeRequests = new Map<string, PendingCosmeticsRequest>();
+  const panelMediaToneCache = new Map<string, MediaTone | Promise<MediaTone>>();
 
-  window.addEventListener("message", (event) => {
-    if (event.source !== window) return;
+  windowRef.addEventListener("message", (event: MessageEvent) => {
+    if (event.source !== windowRef) return;
     const message = event.data;
     if (!message || message.source !== "vortex-web-extension" || message.type !== "vortex-web-cosmetics:users") return;
     const pending = cosmeticsBridgeRequests.get(message.requestId);
     if (!pending) return;
     cosmeticsBridgeRequests.delete(message.requestId);
-    window.clearTimeout(pending.timer);
+    windowRef.clearTimeout(pending.timer);
     pending.resolve(message.records && typeof message.records === "object" ? message.records : {});
   });
 
   runtime.community?.onVortexUserProfile?.((profile) => applyPlatformProfile(profile));
 
-  function getBadge(player) {
+  function getBadge(player: LeaderboardPlayer) {
     const profile = platformProfiles.get(Number(player.id));
     if (player.is_staff || profile?.isStaff) return STAFF_ICON;
     if (player.is_moderator || profile?.isModerator) return MOD_ICON;
@@ -66,76 +143,12 @@ export class LeaderboardDomService {
     return null;
   }
 
-  function readCosmetics() {
-    const cached = readLocalCosmeticsCache();
-    const meta = document.getElementById("_vortexWebCosmetics");
-    if (!meta?.content) return cached;
-    try {
-      const parsed = JSON.parse(meta.content);
-      if (!parsed || typeof parsed !== "object") return cached;
-      return {
-        records: { ...(cached.records || {}), ...(parsed.records || {}) },
-        fetchedAt: { ...(cached.fetchedAt || {}), ...(parsed.fetchedAt || {}) },
-        cacheTtlMs: parsed.cacheTtlMs || cached.cacheTtlMs || COSMETICS_TTL_MS
-      };
-    } catch {
-      return cached;
-    }
-  }
-
-  function readLocalCosmeticsCache() {
-    try {
-      const raw = localStorage.getItem(COSMETICS_PAGE_CACHE_KEY);
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (!parsed || typeof parsed !== "object") return { records: {}, fetchedAt: {}, cacheTtlMs: COSMETICS_TTL_MS };
-      return {
-        records: parsed.records && typeof parsed.records === "object" ? parsed.records : {},
-        fetchedAt: parsed.fetchedAt && typeof parsed.fetchedAt === "object" ? parsed.fetchedAt : {},
-        cacheTtlMs: COSMETICS_TTL_MS
-      };
-    } catch {
-      return { records: {}, fetchedAt: {}, cacheTtlMs: COSMETICS_TTL_MS };
-    }
-  }
-
   function writeLocalCosmeticsCache() {
-    try {
-      localStorage.setItem(COSMETICS_PAGE_CACHE_KEY, JSON.stringify({
-        records: cosmetics.records || {},
-        fetchedAt: cosmetics.fetchedAt || {},
-        cacheTtlMs: COSMETICS_TTL_MS
-      }));
-    } catch {}
+    writeLeaderboardCosmeticsCache(localStorage, cosmetics);
   }
 
-  function readCommunityApiBase() {
-    const meta = document.getElementById("_vortexCommunityApi");
-    if (!meta?.content) return "https://v22.irongiant.vip";
-    try {
-      const parsed = JSON.parse(meta.content);
-      return String(parsed || "https://v22.irongiant.vip").replace(/\/+$/, "");
-    } catch {
-      return "https://v22.irongiant.vip";
-    }
-  }
-
-  function cosmeticsFor(playerId) {
-    return cosmetics.records?.[playerId] || cosmetics.records?.[String(playerId)] || null;
-  }
-
-  function playerPanelBackgroundUrl(record) {
-    return String(
-      record?.profileBackgroundUrl ||
-      record?.profile_background_url ||
-      record?.backgroundUrl ||
-      record?.background_url ||
-      ""
-    ).trim();
-  }
-
-  function isVideoUrl(value) {
-    const raw = String(value || "").split("?")[0].split("#")[0].toLowerCase();
-    return raw.endsWith(".mp4") || raw.endsWith(".webm") || raw.endsWith(".mov") || raw.endsWith(".m4v");
+  function cosmeticsFor(playerId: number | string) {
+    return readCosmeticsFor(cosmetics, playerId);
   }
 
   function clearPlayerPanelCosmetics() {
@@ -147,7 +160,7 @@ export class LeaderboardDomService {
     if (media) media.remove();
   }
 
-  function renderPlayerPanelCosmetics(playerId) {
+  function renderPlayerPanelCosmetics(playerId: number | string) {
     if (!playerPanel) return;
     if (!displaySettings.miniProfileCosmetics) {
       clearPlayerPanelCosmetics();
@@ -164,7 +177,7 @@ export class LeaderboardDomService {
     playerPanel.style.removeProperty("--lbp-bg-image");
     playerPanel.dataset.lbpBgUrl = url;
 
-    let media = playerPanel.querySelector(".lbp-bg-video");
+    let media = playerPanel.querySelector<HTMLVideoElement>(".lbp-bg-video");
     if (!url || !video) {
       if (media) media.remove();
     }
@@ -195,7 +208,7 @@ export class LeaderboardDomService {
     applyPlayerPanelTone(url, null);
   }
 
-  function applyPlayerPanelTone(url, media) {
+  function applyPlayerPanelTone(url: string, media: HTMLVideoElement | null) {
     if (!playerPanel || !url) return;
     const cached = panelMediaToneCache.get(url);
     if (typeof cached === "string") {
@@ -207,7 +220,7 @@ export class LeaderboardDomService {
       return;
     }
 
-    const promise = estimateMediaTone(url, media)
+    const promise = estimateMediaTone(document, url, media)
       .then((tone) => {
         const resolved = tone || "dark";
         panelMediaToneCache.set(url, resolved);
@@ -219,50 +232,16 @@ export class LeaderboardDomService {
         setPlayerPanelTone(url, "dark");
         return "dark";
       });
-    panelMediaToneCache.set(url, promise);
+    panelMediaToneCache.set(url, promise as Promise<MediaTone>);
   }
 
-  function setPlayerPanelTone(url, tone) {
+  function setPlayerPanelTone(url: string, tone: MediaTone) {
     if (!playerPanel || playerPanel.dataset.lbpBgUrl !== url) return;
     playerPanel.classList.toggle("lbp-tone-light", tone === "light");
     playerPanel.classList.toggle("lbp-tone-dark", tone !== "light");
   }
 
-  async function estimateMediaTone(url, media) {
-    const source = media || await loadToneImage(url);
-    if (source instanceof HTMLVideoElement && source.readyState < 2) {
-      await new Promise((resolve) => source.addEventListener("loadeddata", resolve, { once: true }));
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = 24;
-    canvas.height = 24;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    if (!context) return null;
-    context.drawImage(source, 0, 0, canvas.width, canvas.height);
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    let total = 0;
-    let count = 0;
-    for (let index = 0; index < pixels.length; index += 4) {
-      const alpha = pixels[index + 3] / 255;
-      if (alpha < 0.2) continue;
-      total += (0.2126 * pixels[index] + 0.7152 * pixels[index + 1] + 0.0722 * pixels[index + 2]) * alpha;
-      count += alpha;
-    }
-    if (!count) return null;
-    return total / count > 150 ? "light" : "dark";
-  }
-
-  function loadToneImage(url) {
-    return new Promise((resolve, reject) => {
-      const image = new Image();
-      image.crossOrigin = "anonymous";
-      image.onload = () => resolve(image);
-      image.onerror = reject;
-      image.src = url;
-    });
-  }
-
-  function cleanPlayerName(id, value, previous = "") {
+  function cleanPlayerName(id: number, value: unknown, previous = "") {
     const raw = String(value || "").trim();
     const profile = platformProfiles.get(Number(id));
     const fallback = previous || profile?.username || `#${id}`;
@@ -281,7 +260,7 @@ export class LeaderboardDomService {
     return raw;
   }
 
-  function isPlaceholderName(id, value) {
+  function isPlaceholderName(id: number, value: unknown) {
     const raw = String(value || "").trim();
     if (!raw) return true;
     const lower = raw.toLowerCase();
@@ -293,7 +272,7 @@ export class LeaderboardDomService {
       lower === "browserplayer";
   }
 
-  function applyPlatformProfile(profile) {
+  function applyPlatformProfile(profile: PlatformProfile | null | undefined) {
     if (!profile || !profile.id) return;
     platformProfiles.set(Number(profile.id), profile);
     let changed = false;
@@ -323,11 +302,11 @@ export class LeaderboardDomService {
     if (changed) renderLeaderboard();
   }
 
-  function selectedVwBadge(record) {
+  function selectedVwBadge(record: LeaderboardCosmeticsRecord | null) {
     return record?.badges?.find((badge) => badge.selected) || null;
   }
 
-  function renderVwBadge(record) {
+  function renderVwBadge(record: LeaderboardCosmeticsRecord | null) {
     if (!displaySettings.leaderboardCosmetics) return "";
     const badge = selectedVwBadge(record);
     if (!badge) return "";
@@ -343,13 +322,13 @@ export class LeaderboardDomService {
     return `<span class="${classes}"${style} title="${escapeAttr(badgeDescription(badge))}">${badgeIcon(badge.kind)}</span>`;
   }
 
-  function rowCosmeticStyle(record) {
+  function rowCosmeticStyle(record: LeaderboardCosmeticsRecord | null) {
     if (!displaySettings.leaderboardCosmetics) return "";
     if (!record?.nameplateUrl) return "";
     return `--lb-row-nameplate-image:url('${cssUrl(record.nameplateUrl)}')`;
   }
 
-  function renderNameplate(record, safeName) {
+  function renderNameplate(record: LeaderboardCosmeticsRecord | null, safeName: string) {
     if (!displaySettings.leaderboardCosmetics) return `<span class="lb-nameplate"><span class="lb-name-text">${safeName}</span></span>`;
     const styles = [];
     if (record?.nameGradient?.length === 2) {
@@ -395,7 +374,7 @@ export class LeaderboardDomService {
       if (rowStyle) row.setAttribute("style", rowStyle);
 
       if (!isSelf) {
-        row.dataset.playerId = player.id;
+        row.dataset.playerId = String(player.id);
       }
 
       const nameEl = document.createElement("span");
@@ -421,7 +400,7 @@ export class LeaderboardDomService {
         const val = document.createElement("span");
         val.className = "lb-col-val";
         val.textContent =
-          player[col.key] != null ? player[col.key] : "—";
+          player[col.key] != null ? String(player[col.key]) : "-";
         row.appendChild(val);
       }
 
@@ -429,7 +408,7 @@ export class LeaderboardDomService {
     }
   }
 
-  function updateFollowState(state, targetId) {
+  function updateFollowState(state: FollowStatus, targetId: number) {
     followStatusMap[targetId] = state;
 
     playerFollowBtn.onclick = null;
@@ -476,7 +455,7 @@ export class LeaderboardDomService {
     }
   }
 
-  function loadCosmeticsForPlayers(list) {
+  function loadCosmeticsForPlayers(list: LeaderboardPlayer[]) {
     if (!displaySettings.leaderboardCosmetics && !displaySettings.miniProfileCosmetics) return;
     if (!communityApiBase || !Array.isArray(list) || !list.length) return;
     const ids = [...new Set(list.map((player) => Number(player.id)).filter((id) => Number.isFinite(id) && id > 0))].sort((a, b) => a - b);
@@ -513,7 +492,7 @@ export class LeaderboardDomService {
       .catch(() => {});
   }
 
-  function loadPlatformProfilesForPlayers(list) {
+  function loadPlatformProfilesForPlayers(list: LeaderboardPlayer[]) {
     const ids = [...new Set((Array.isArray(list) ? list : [])
       .filter((player) => needsPlatformProfile(player))
       .map((player) => Number(player.id))
@@ -521,7 +500,7 @@ export class LeaderboardDomService {
     runtime.community?.prefetchVortexUsers?.(ids);
   }
 
-  function needsPlatformProfile(player) {
+  function needsPlatformProfile(player: Partial<LeaderboardPlayer> | null | undefined) {
     const id = Number(player?.id);
     if (!Number.isFinite(id) || id <= 0) return false;
     if (platformProfiles.has(id) || runtime.community?.getVortexUser?.(id)) return false;
@@ -529,8 +508,8 @@ export class LeaderboardDomService {
     return isPlaceholderName(id, player?.username) || player?.is_staff === undefined || player?.is_moderator === undefined || player?.is_booster === undefined;
   }
 
-  function requestCosmeticsFromExtension(userIds) {
-    return new Promise((resolve) => {
+  function requestCosmeticsFromExtension(userIds: number[]) {
+    return new Promise<Record<string, LeaderboardCosmeticsRecord>>((resolve) => {
       const requestId = `lb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       const timer = window.setTimeout(() => {
         cosmeticsBridgeRequests.delete(requestId);
@@ -546,40 +525,7 @@ export class LeaderboardDomService {
     });
   }
 
-  function cssUrl(value) {
-    return String(value || "").replace(/["'\\\n\r]/g, "");
-  }
-
-  function badgeDescription(badge) {
-    const kind = String(badge?.kind || "community");
-    if (kind === "developer") return "Project developer badge";
-    if (kind === "sponsor") return "Monthly project sponsor badge";
-    if (kind === "supporter") return "One-time project supporter badge";
-    if (kind === "contributor") return "Code, design, testing, or community contribution badge";
-    return "Community recognition badge";
-  }
-
-  function badgeIcon(kind) {
-    if (kind === "developer") return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1.293 11.293l4-4a1 1 0 1 1 1.414 1.414L3.414 12l3.293 3.293a1 1 0 1 1-1.414 1.414l-4-4a1 1 0 0 1 0-1.414Zm17.414-4a1 1 0 1 0-1.414 1.414L20.586 12l-3.293 3.293a1 1 0 1 0 1.414 1.414l4-4a1 1 0 0 0 0-1.414ZM13.039 4.726l-4 14a1 1 0 0 0 .686 1.236A1.053 1.053 0 0 0 10 20a1 1 0 0 0 .961-.726l4-14a1 1 0 1 0-1.922-.548Z"/></svg>';
-    if (kind === "sponsor") return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.269 4.411c.232-.519.347-.779.509-.859a.5.5 0 0 1 .444 0c.161.08.277.34.508.859l1.845 4.137c.068.154.102.23.155.289a.5.5 0 0 0 .168.122c.073.032.156.041.323.059l4.505.475c.565.06.848.09.974.218a.5.5 0 0 1 .137.423c-.026.178-.237.368-.66.749l-3.365 3.032c-.124.113-.187.169-.226.237a.5.5 0 0 0-.065.198c-.008.079.01.161.045.326l.939 4.43c.118.557.177.835.094.994a.5.5 0 0 1-.36.261c-.177.03-.423-.112-.916-.396L12.4 17.702c-.146-.084-.219-.125-.296-.142a.5.5 0 0 0-.208 0c-.077.017-.15.058-.296.142l-3.923 2.263c-.493.284-.739.426-.917.397a.5.5 0 0 1-.359-.262c-.083-.159-.024-.437.094-.994l.939-4.43c.035-.165.053-.247.044-.326a.5.5 0 0 0-.064-.198c-.04-.068-.102-.124-.227-.237l-3.365-3.032c-.422-.38-.633-.57-.659-.749a.5.5 0 0 1 .137-.423c.126-.128.409-.158.974-.218l4.504-.475c.168-.018.252-.027.324-.059a.5.5 0 0 0 .168-.122c.053-.059.087-.135.155-.289l1.844-4.137Z"/></svg>';
-    if (kind === "supporter") return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.243 8.243 8 15l6.757-6.757A4.243 4.243 0 0 0 16 5.243v-.191A4.052 4.052 0 0 0 11.948 1a4.052 4.052 0 0 0-3.165 1.521L8 3.5l-.783-.979A4.052 4.052 0 0 0 4.052 1 4.052 4.052 0 0 0 0 5.052v.191c0 1.125.447 2.204 1.243 3Z"/></svg>';
-    if (kind === "contributor") return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5 13.058.442A4.981 4.981 0 0 0 11 0a5 5 0 0 0-5 5c0 .458.062.902.177 1.323L0 12.5 3.5 16l6.177-6.177c.421.115.865.177 1.323.177a5 5 0 0 0 4.558-7.058L12.5 6H10V3.5Z"/></svg>';
-    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 18c0-2.606 1.661-4.823 3.982-5.652A5.987 5.987 0 0 1 9 12c.708 0 1.388.123 2.018.348.343.122.671.275.982.455.311-.18.639-.333.982-.455A5.987 5.987 0 0 1 15 12c.708 0 1.388.123 2.018.348C19.339 13.177 21 15.394 21 18v3h-5.25v-1.5h3.75V18a4.5 4.5 0 0 0-6.188-4.173A5.983 5.983 0 0 1 15 18v3H3v-3Zm6-6.75a3.75 3.75 0 1 1 3-6 3.75 3.75 0 1 1 1.111 5.49A3.74 3.74 0 0 1 12 9.75a3.74 3.74 0 0 1-1.111.99A3.73 3.73 0 0 1 9 11.25ZM13.5 18v1.5h-9V18a4.5 4.5 0 0 1 9 0Zm-2.25-10.5a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM15 5.25a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Z"/></svg>';
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function escapeAttr(value) {
-    return escapeHtml(value).replace(/`/g, "&#96;");
-  }
-
-  function openPlayerPanel(playerId) {
+  function openPlayerPanel(playerId: number) {
     if (selectedPlayerId === playerId) {
       selectedPlayerId = null;
       playerPanel.style.display = "none";
@@ -624,7 +570,7 @@ export class LeaderboardDomService {
     }
   }
 
-  function renderPlayerPanelMeta(profile) {
+  function renderPlayerPanelMeta(profile: PlatformProfile | null) {
     if (!playerMetaElem) return;
     if (!profile) {
       playerMetaElem.innerHTML = '<div class="lbp-loading">Loading profile...</div>';
@@ -643,19 +589,19 @@ export class LeaderboardDomService {
     playerMetaElem.innerHTML = rows.length ? rows.join("") : "";
   }
 
-  function formatDate(value) {
+  function formatDate(value: string) {
     const date = new Date(value);
     if (!Number.isFinite(date.getTime())) return value;
     return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
   }
 
-  function formatCount(value) {
+  function formatCount(value: unknown) {
     const number = Number(value);
     if (!Number.isFinite(number)) return "0";
     return new Intl.NumberFormat(undefined, { notation: number >= 10000 ? "compact" : "standard" }).format(number);
   }
 
-  function updateFriendState(state, targetId) {
+  function updateFriendState(state: FriendStatus, targetId: number) {
     friendStatusMap[targetId] = state;
 
     playerFriendBtn.onclick = null;
@@ -681,13 +627,13 @@ export class LeaderboardDomService {
         if (res.ok) {
           if (json.result === "accepted") {
             updateFriendState("friends", targetId);
-            window._mpSetFriendStatus?.(targetId, "friends");
-            window.Notifications?.friendAccepted(
+            windowRef._mpSetFriendStatus?.(targetId, "friends");
+            windowRef.Notifications?.friendAccepted(
               json.target_username
             );
           } else {
             updateFriendState("request_sent", targetId);
-            window._mpSetFriendStatus?.(
+            windowRef._mpSetFriendStatus?.(
               targetId,
               "request_sent"
             );
@@ -717,7 +663,7 @@ export class LeaderboardDomService {
 
         if (res.ok) {
           updateFriendState("none", targetId);
-          window._mpSetFriendStatus?.(targetId, "none");
+          windowRef._mpSetFriendStatus?.(targetId, "none");
           renderLeaderboard();
         } else {
           updateFriendState("request_sent", targetId);
@@ -735,10 +681,10 @@ export class LeaderboardDomService {
           "/api/friends/requests/incoming"
         );
 
-        const list = await res.json().catch(() => []);
+        const list = await res.json().catch(() => []) as Array<{ id: number; from_user_id: number }>;
 
         const req = list.find(
-          (r) => r.from_user_id === targetId
+          (r: { from_user_id: number }) => r.from_user_id === targetId
         );
 
         if (selectedPlayerId !== targetId) return;
@@ -751,11 +697,11 @@ export class LeaderboardDomService {
 
           if (accept.ok) {
             updateFriendState("friends", targetId);
-            window._mpSetFriendStatus?.(
+            windowRef._mpSetFriendStatus?.(
               targetId,
               "friends"
             );
-            window.Notifications?.friendAccepted(
+            windowRef.Notifications?.friendAccepted(
               playerNameElem.textContent
             );
             renderLeaderboard();
@@ -783,24 +729,24 @@ export class LeaderboardDomService {
     }
   });
 
-  window.Leaderboard = {
-    setMyId(id) {
+  windowRef.Leaderboard = {
+    setMyId(id: number) {
       myPlayerId = id;
       renderLeaderboard();
     },
 
-    setColumns(cols) {
+    setColumns(cols: LeaderboardColumn[]) {
       columns = cols;
       renderLeaderboard();
     },
 
-    setPlayers(list) {
+    setPlayers(list: LeaderboardPlayer[]) {
       players = [...list];
       loadPlatformProfilesForPlayers(players);
       renderLeaderboard();
     },
 
-    addPlayer(player) {
+    addPlayer(player: LeaderboardPlayer) {
       const idx = players.findIndex((p) => p.id === player.id);
       const previous = idx >= 0 ? players[idx] : null;
       const merged = {
@@ -819,7 +765,7 @@ export class LeaderboardDomService {
       renderLeaderboard();
     },
 
-    removePlayer(id) {
+    removePlayer(id: number) {
       players = players.filter((p) => p.id !== id);
 
       if (selectedPlayerId === id) {
@@ -831,7 +777,7 @@ export class LeaderboardDomService {
       renderLeaderboard();
     },
 
-    updateStat(id, key, value) {
+    updateStat(id: number, key: string, value: unknown) {
       const p = players.find((x) => x.id === id);
       if (p) {
         p[key] = value;
@@ -839,7 +785,7 @@ export class LeaderboardDomService {
       }
     },
 
-    batchUpdateStat(updates) {
+    batchUpdateStat(updates: Array<{ id: number; key: string; value: unknown }>) {
       for (const { id, key, value } of updates) {
         const p = players.find((x) => x.id === id);
         if (p) p[key] = value;
@@ -847,24 +793,24 @@ export class LeaderboardDomService {
       renderLeaderboard();
     },
 
-    setFriendStatuses(map) {
+    setFriendStatuses(map: Record<string, FriendStatus>) {
       friendStatusMap = { ...friendStatusMap, ...map };
       renderLeaderboard();
     },
 
-    setFriendStatus(id, status) {
+    setFriendStatus(id: number, status: FriendStatus) {
       friendStatusMap[id] = status;
       renderLeaderboard();
     },
 
-    setFollowStatus(id, status) {
+    setFollowStatus(id: number, status: FollowStatus) {
       followStatusMap[id] = status;
       if (selectedPlayerId === id) {
         updateFollowState(status, id);
       }
     },
 
-    getPlayer(id) {
+    getPlayer(id: number) {
       return players.find((p) => p.id === id) || null;
     },
 
@@ -891,18 +837,18 @@ export class LeaderboardDomService {
     },
   };
 
-  runtime.leaderboard.adopt(window.Leaderboard);
+  runtime.leaderboard.adopt(windowRef.Leaderboard);
   }
 }
 
-function ensurePlayerMetaElement(panel, documentRef) {
+function ensurePlayerMetaElement(panel: HTMLElement | null, documentRef: Document): HTMLElement | null {
   if (!panel) return null;
-  const existing = panel.querySelector?.("#lbp-meta");
+  const existing = panel.querySelector<HTMLElement>("#lbp-meta");
   if (existing) return existing;
   const element = documentRef.createElement("div");
   element.id = "lbp-meta";
   element.className = "lbp-meta";
-  const profileLink = panel.querySelector?.("#lbp-profile-link");
+  const profileLink = panel.querySelector<HTMLElement>("#lbp-profile-link");
   if (profileLink) panel.insertBefore(element, profileLink);
   else panel.appendChild(element);
   return element;
