@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RuntimeApiExportService } from "../runtime/RuntimeApiExportService";
+import { RuntimeApiExportService, type RuntimeApi } from "../runtime/RuntimeApiExportService";
 
 describe("RuntimeApiExportService", () => {
   it("installs runtime globals and adapter handles in one place", () => {
@@ -17,7 +17,7 @@ describe("RuntimeApiExportService", () => {
       pick: () => undefined,
       getObjects: () => [],
       getColliders: () => []
-    };
+    } as unknown as RuntimeApi;
 
     service.install({
       windowRef,

@@ -1,3 +1,5 @@
+import type { RuntimeApi } from "../../runtime/RuntimeApiExportService";
+
 export type MultiplayerBridgeDependencies = {
   window: Window & {
     VortexRuntime?: any;
@@ -17,7 +19,7 @@ export type MultiplayerBridgeDependencies = {
   location: Location;
   THREE: any;
   Chat: any;
-  runtimeApi: any;
+  runtimeApi: RuntimeApi;
   scene: any;
 };
 
@@ -25,12 +27,12 @@ export type MultiplayerBridgeDependencyResult =
   | { ok: true; deps: MultiplayerBridgeDependencies }
   | { ok: false; reason: string };
 
-export function resolveMultiplayerBridgeDependencies(windowRef: Window, documentRef: Document, runtimeApi: unknown): MultiplayerBridgeDependencyResult {
+export function resolveMultiplayerBridgeDependencies(windowRef: Window, documentRef: Document, runtimeApi: RuntimeApi | null): MultiplayerBridgeDependencyResult {
   const window = windowRef as MultiplayerBridgeDependencies["window"];
   const document = documentRef;
   const THREE = window.VortexRuntime?.renderer?.getHandles?.()?.three;
   const Chat = window.Chat;
-  const api = runtimeApi as any;
+  const api = runtimeApi;
 
   if (!api) return { ok: false, reason: "runtime exports are not ready" };
   if (!THREE) return { ok: false, reason: "THREE is not ready" };

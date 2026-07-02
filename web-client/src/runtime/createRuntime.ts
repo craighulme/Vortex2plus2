@@ -70,6 +70,7 @@ import { WorldPickingService } from "../world/WorldPickingService";
 import { WorldRuntimeService } from "../world/WorldRuntimeService";
 import { EventBus } from "./EventBus";
 import { RuntimeApiExportService } from "./RuntimeApiExportService";
+import type { RuntimeApi } from "./RuntimeApiExportService";
 import { RuntimeStartupService } from "./RuntimeStartupService";
 import { SceneRuntimeSetupService } from "./SceneRuntimeSetupService";
 import { FrameLoopService } from "./FrameLoopService";
@@ -198,9 +199,7 @@ export function createVortexRuntime(options: RuntimeOptions): VortexRuntime {
   return runtime;
 }
 
-export function attachRuntimeApi(runtime: VortexRuntime, api: unknown): void {
-  if (!api || typeof api !== "object") return;
-  const runtimeApi = api as Record<string, unknown>;
+export function attachRuntimeApi(runtime: VortexRuntime, runtimeApi: RuntimeApi): void {
   const renderer = runtime.renderer.getHandles().renderer;
   const domElement = readRendererDomElement(renderer);
   if (domElement) runtime.input.attachTarget(domElement);

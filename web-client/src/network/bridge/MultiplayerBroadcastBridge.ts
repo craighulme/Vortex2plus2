@@ -1,15 +1,12 @@
+import type { RuntimeApi } from "../../runtime/RuntimeApiExportService";
+
 const BROADCAST_TICK_MS = 50;
 
 type BroadcastBridgeContext = {
   window: Window;
   setInterval: Window["setInterval"];
   clearInterval: Window["clearInterval"];
-  runtimeApi: {
-    keys: Record<string, boolean>;
-    getCharacter(): { position: { x: number; y: number; z: number }; rotation: { y: number } } | null;
-    getGrounded(): boolean;
-    getClimbState(): unknown;
-  };
+  runtimeApi: Pick<RuntimeApi, "keys" | "getCharacter" | "getGrounded" | "getClimbState">;
   runtimeSession(): {
     startBroadcast(options: Record<string, unknown>): void;
     runBroadcastTick(options: Record<string, unknown>): void;
@@ -48,15 +45,15 @@ export function createMultiplayerBroadcastBridge(context: BroadcastBridgeContext
         runtimeSession().runBroadcastTick({
           isOpen: bridgeOpen,
           getCharacter: () => runtimeApi.getCharacter(),
-          buildState: (char: { position: { x: number; y: number; z: number }; rotation: { y: number } }) => {
+          buildState: (char: NonNullable<ReturnType<RuntimeApi["getCharacter"]>>) => {
             const keys = runtimeApi.keys;
             const moving = keys["KeyW"] || keys["KeyS"] || keys["KeyA"] || keys["KeyD"] ||
               keys["ArrowUp"] || keys["ArrowDown"] || keys["ArrowLeft"] || keys["ArrowRight"];
             return runtimeMultiplayer().buildLocalBroadcastState({
-              x: char.position.x,
+              x: char.position.x ?? 0,
               y: char.position.y,
-              z: char.position.z,
-              rotationY: char.rotation.y,
+              z: char.position.z ?? 0,
+              rotationY: char.rotation.y ?? 0,
               moving: !!moving,
               grounded: !!runtimeApi.getGrounded(),
               climbState: runtimeApi.getClimbState(),

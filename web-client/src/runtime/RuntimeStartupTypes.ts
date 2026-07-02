@@ -8,7 +8,7 @@ import type { LocalMovementRuntimeService } from "../movement/LocalMovementRunti
 import type { QualityService } from "../renderer/QualityService";
 import type { RendererService } from "../renderer/RendererService";
 import type { SceneSettingsService } from "../renderer/SceneSettingsService";
-import type { RuntimeApiExportService } from "./RuntimeApiExportService";
+import type { RuntimeApi, RuntimeApiExportService } from "./RuntimeApiExportService";
 import type { FrameLoopService } from "./FrameLoopService";
 import type { WorldDynamicAdapter } from "../world/WorldDynamicObjectService";
 
@@ -54,7 +54,7 @@ export type RuntimeStartupConfig = {
   rendererService: RendererService;
   quality: QualityService;
   runtimeApiExports: RuntimeApiExportService;
-  setRuntimeApi(value: Record<string, unknown>): void;
+  setRuntimeApi(value: RuntimeApi): void;
   frameLoop: FrameLoopService;
   profiler: { begin(now: number): unknown; mark(frame: unknown, label: string): void; end(frame: unknown): void };
   worldService: {

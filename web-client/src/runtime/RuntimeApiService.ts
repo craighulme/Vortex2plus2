@@ -1,11 +1,12 @@
 import type { RuntimeApi } from "./RuntimeApiExportService";
 import type { RuntimeStartupConfig } from "./RuntimeStartupTypes";
+import type { RigBoneRest, RuntimeObject3D } from "../avatar/remote/RemotePlayerTypes";
 
 export class RuntimeApiService {
   create(config: RuntimeStartupConfig): RuntimeApi {
     return {
-      scene: config.scene,
-      getCharacter: config.getCharacter,
+      scene: config.scene as RuntimeApi["scene"],
+      getCharacter: () => config.getCharacter() as RuntimeObject3D | null,
       getGrounded: () => config.localMovement.getGrounded(),
       getVelY: () => config.localMovement.getVelY(),
       setVelY: (value: unknown) => config.localMovement.setVelY(value),
@@ -18,7 +19,7 @@ export class RuntimeApiService {
       getCharFootOffset: config.getCharFootOffset,
       getCharHeight: config.getCharHeight,
       getSpawn: () => config.characterSpawn.getSpawn(),
-      getAnimRest: () => config.anim.rest,
+      getAnimRest: () => config.anim.rest as Record<string, RigBoneRest>,
       getFootIkState: () => config.animation.getFootIkState(),
       keys: config.keys,
       setSens: (multiplier: unknown) => config.camera.setSensitivity(multiplier),

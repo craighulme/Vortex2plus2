@@ -15,19 +15,20 @@ import { handleMultiplayerBridgeMessage } from "./MultiplayerRouterBridgeContext
 import { createMultiplayerLaunchState } from "./MultiplayerLaunchState";
 import { createMultiplayerProfileBridge } from "./MultiplayerProfileBridge";
 import { createMultiplayerReconnectBridge } from "./MultiplayerReconnectBridge";
+import type { RuntimeApi } from "../../runtime/RuntimeApiExportService";
 
 export class MultiplayerBridgeService {
   private mounted = false;
   private frameBridge: { updateFrame?: (dt: number) => void } | null = null;
-  private runtimeApi: Record<string, any> | null = null;
+  private runtimeApi: RuntimeApi | null = null;
 
   constructor(
     private readonly windowRef: Window,
     private readonly documentRef: Document
   ) {}
 
-  setRuntimeApi(api: unknown) {
-    this.runtimeApi = api && typeof api === "object" ? api as Record<string, any> : null;
+  setRuntimeApi(api: RuntimeApi) {
+    this.runtimeApi = api;
   }
 
   mount(runtime: any): boolean {

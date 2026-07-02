@@ -1,6 +1,38 @@
+import type { RemotePlayerRuntimeApi } from "../avatar/remote/RemotePlayerTypes";
 import type { WorldDynamicAdapter } from "../world/WorldDynamicObjectService";
 
-export type RuntimeApi = Record<string, unknown>;
+export type RuntimeApi = RemotePlayerRuntimeApi & {
+  getGrounded(): boolean;
+  getVelY(): number;
+  setVelY(value: unknown): unknown;
+  setGrounded(value: unknown): unknown;
+  getMovementConstants(): unknown;
+  getMovementMods(): unknown;
+  setMovementMods(patch: unknown): unknown;
+  getCameraState(): unknown;
+  getClimbState(): unknown;
+  getSpawn(): unknown;
+  getFootIkState(): unknown;
+  keys: Record<string, boolean>;
+  setSens(multiplier: unknown): unknown;
+  getShadowsEnabled(): boolean;
+  setShadowsEnabled(value: unknown): unknown;
+  requestLock(): void;
+  resetCharacter(): boolean;
+  pick(): unknown;
+  getObjects(): unknown[];
+  getColliders(): unknown[];
+  getCamera(): unknown;
+  getCharBubbleBase(): number;
+  setSpawn(x: number, y: number, z: number, ry?: number): void;
+  applyShirt(url: string): void;
+  applyShirtToMesh(mesh: unknown, url: string): void;
+  applyBodyColors(target: unknown, colors: unknown): void;
+  prepareModernAvatarMaterials(target: unknown): void;
+  prefetchAvatarImages(avatars: unknown): unknown;
+  applyAvatar(avatar: unknown): Promise<void>;
+  getAvatar(): unknown;
+};
 
 export type RuntimeApiExportOptions = {
   windowRef: Window & Record<string, unknown>;
